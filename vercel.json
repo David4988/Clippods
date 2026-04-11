@@ -6,17 +6,21 @@
       "use": "@vercel/python"
     },
     {
-      "src": "index.html",
+      "src": "*.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.css",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.js",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(upload|status|results|outputs)",
-      "dest": "/main.py"
-    },
-    {
-      "src": "/(upload|status|results|outputs)/(.*)",
+      "src": "/(jobs|clips|outputs)(/.*)?",
       "dest": "/main.py"
     },
     {

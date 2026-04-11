@@ -26,8 +26,13 @@ SCORE_WEIGHT_ENERGY = 0.7
 SCORE_WEIGHT_DURATION = 0.3
 
 # Storage paths
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "storage", "uploads")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "storage", "outputs")
+# Use /tmp for writable storage on Vercel
+if os.getenv("VERCEL"):
+    UPLOAD_DIR = "/tmp/uploads"
+    OUTPUT_DIR = "/tmp/outputs"
+else:
+    UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "storage", "uploads")
+    OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "storage", "outputs")
 
 # Server
 HOST = "0.0.0.0"
