@@ -1,9 +1,26 @@
+<<<<<<< HEAD
 requests>=2.31.0
 python-dotenv>=1.0.0
-fastapi>=0.104.0
 uvicorn>=0.24.0
 python-multipart>=0.0.6
 aiofiles>=23.0.0
 pydub>=0.25.1
 librosa>=0.10.0
 numpy>=1.24.0
+# ClipPods – Backend Dependencies
+# Run: pip install -r requirements.txt
+
+# ── Web Framework ─────────────────────────────────────────
+fastapi>=0.103.1
+uvicorn[standard]>=0.23.2
+
+
+# ── AI / Transcription ────────────────────────────────────
+sarvamai>=0.1.0             # Sarvam AI client (saaras:v3)
+
+# ── Media Processing ──────────────────────────────────────
+yt-dlp>=2023.10.13          # YouTube downloading
+ffmpeg-python>=0.2.0        # FFmpeg Python bindings
+
+# ── Data Validation ───────────────────────────────────────
+pydantic>=2.4.2

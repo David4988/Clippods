@@ -60,7 +60,7 @@ def transcribe(audio_path: str) -> list[Segment]:
 
             results = []
 
-            max_workers = min(3, len(chunks))  # 🔥 controlled concurrency
+            max_workers = min(2, len(chunks))  # 🔥 capped to match backend semaphore
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(process_chunk, c) for c in chunks]

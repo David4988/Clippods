@@ -4,12 +4,7 @@ Extracts audio clips with fade in/out using FFmpeg via pydub.
 """
 
 import os
-from pydub import AudioSegment
-
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from config import CLIP_FADE_MS, CLIP_BITRATE
-
+import subprocess
 
 def extract_clip(
     audio_path: str,
@@ -19,11 +14,16 @@ def extract_clip(
 ) -> str:
     """
     Extract a clip from audio_path between start_sec and end_sec.
-    Applies fade in/out. Exports as MP3.
+    Uses native FFmpeg -c copy for fast, memory-safe splitting.
     Returns: output_path
     """
-    audio = AudioSegment.from_file(audio_path)
-    clip = audio[int(start_sec * 1000):int(end_sec * 1000)]
-    clip = clip.fade_in(CLIP_FADE_MS).fade_out(CLIP_FADE_MS)
-    clip.export(output_path, format="mp3", bitrate=CLIP_BITRATE)
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", audio_path,
+        "-ss", str(start_sec),
+        "-to", str(end_sec),
+        "-c", "copy",
+        output_path
+    ]
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return output_path

@@ -1,21 +1,721 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClipPods — Tamil Podcast Highlights</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClipPods — AI-Powered Podcast Clipping for Tamil & Hindi Creators</title>
+    <meta name="description"
+        content="ClipPods turns long podcast videos into short, high-impact highlight clips using AI. Built for Tamil & Hindi creators." />
+    <meta name="keywords"
+        content="podcast clips, AI clipping, Tamil podcasts, Hindi podcasts, highlight reels, short clips" />
+    <meta name="author" content="ClipPods" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="app.css" />
 </head>
+
 <body>
-    <!-- Landing Page -->
-    <div id="landing">
-        <h1>ClipPods</h1>
-        <p>Convert long-form Tamil podcasts into short highlight clips</p>
-        <a href="app.html" class="cta-btn">Get Started</a>
+
+    <!-- ═══════════════════ CURSOR GLOW ═══════════════════ -->
+    <div id="cursor-glow" class="cursor-glow"></div>
+
+    <!-- ═══════════════════ LOADER ═══════════════════ -->
+    <div id="page-loader" class="loader-overlay">
+        <div class="loader-content">
+            <div class="loader-logo-wrap">
+                <span class="loader-letter" style="--i:0">C</span>
+                <span class="loader-letter" style="--i:1">l</span>
+                <span class="loader-letter" style="--i:2">i</span>
+                <span class="loader-letter" style="--i:3">p</span>
+                <span class="loader-letter accent" style="--i:4">P</span>
+                <span class="loader-letter accent" style="--i:5">o</span>
+                <span class="loader-letter accent" style="--i:6">d</span>
+                <span class="loader-letter accent" style="--i:7">s</span>
+            </div>
+            <div class="loader-bar-track">
+                <div class="loader-bar-fill"></div>
+            </div>
+            <p class="loader-tagline">Preparing your experience...</p>
+        </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- ═══════════════════ NAVBAR ═══════════════════ -->
+    <nav id="navbar" class="navbar">
+        <div class="nav-inner container">
+            <a href="#" class="nav-brand" id="nav-logo">
+                <span class="brand-clip">Clip</span><span class="brand-pods">Pods</span>
+            </a>
+            <ul class="nav-links" id="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#how-it-works">How It Works</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#demo">Demo</a></li>
+            </ul>
+            <a href="#pricing" class="nav-cta" id="nav-cta-btn">
+                <span class="btn-text">Start Free Trial</span>
+                <span class="btn-arrow">&rarr;</span>
+            </a>
+            <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ═══════════════════ HERO ═══════════════════ -->
+    <header id="hero" class="hero section">
+        <!-- Dot grid background -->
+        <canvas id="hero-grid" class="hero-grid-canvas"></canvas>
+        <!-- Radial glow -->
+        <div class="hero-glow"></div>
+
+        <div class="container hero-container">
+            <div class="hero-badge anim-item" data-anim="fade-up" data-delay="0">
+                <span class="badge-dot"></span>
+                <span>Now supporting Tamil &amp; Hindi</span>
+                <span class="badge-arrow">&rarr;</span>
+            </div>
+
+            <h1 class="hero-title anim-item" data-anim="split-text" data-delay="1">
+                Turn long podcasts into<br />
+                <span class="hero-accent">high-impact clips</span>
+            </h1>
+
+            <p class="hero-sub anim-item" data-anim="fade-up" data-delay="3">
+                AI-powered clipping for Tamil &amp; Hindi creators.<br />
+                Upload once. Get highlights instantly.
+            </p>
+
+            <div class="hero-actions anim-item" data-anim="fade-up" data-delay="4">
+                <a href="#pricing" class="btn btn-primary magnetic" id="hero-cta-trial">
+                    <span class="btn-text">Start Free Trial</span>
+                    <span class="btn-shimmer"></span>
+                </a>
+                <a href="#demo" class="btn btn-outline magnetic" id="hero-cta-demo">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    <span class="btn-text">Watch Demo</span>
+                </a>
+            </div>
+
+            <div class="hero-stats anim-item" data-anim="fade-up" data-delay="5">
+                <div class="stat">
+                    <span class="stat-num" data-count="10" data-suffix="x">0x</span>
+                    <span class="stat-label">Faster than manual</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-num" data-count="2" data-suffix="">0</span>
+                    <span class="stat-label">Languages supported</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat">
+                    <span class="stat-num" data-count="98" data-suffix="%">0%</span>
+                    <span class="stat-label">Highlight accuracy</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scroll indicator -->
+        <div class="scroll-indicator anim-item" data-anim="fade-up" data-delay="7">
+            <div class="scroll-mouse">
+                <div class="scroll-wheel"></div>
+            </div>
+            <span>Scroll to explore</span>
+        </div>
+    </header>
+
+    <!-- ═══════════════════ BRAND MARQUEE ═══════════════════ -->
+    <section class="marquee-section">
+        <div class="marquee-track">
+            <div class="marquee-content">
+                <span class="marquee-item">AI-Powered</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Tamil Support</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Hindi Support</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Smart Clipping</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">No Manual Editing</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Fast Processing</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">AI-Powered</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Tamil Support</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Hindi Support</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Smart Clipping</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">No Manual Editing</span>
+                <span class="marquee-dot"></span>
+                <span class="marquee-item">Fast Processing</span>
+                <span class="marquee-dot"></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
+    <section id="how-it-works" class="section">
+        <div class="container">
+            <div class="section-header anim-item" data-anim="fade-up">
+                <span class="section-tag">How It Works</span>
+                <h2 class="section-title">Three steps. Zero effort.</h2>
+                <p class="section-sub">From raw podcast to polished clips in minutes.</p>
+            </div>
+
+            <div class="steps-flow">
+                <!-- Connector line (animated on scroll) -->
+                <div class="steps-connector">
+                    <div class="connector-line" id="connector-line"></div>
+                </div>
+
+                <div class="steps-grid">
+                    <div class="step-card anim-item" data-anim="fade-up" data-delay="0">
+                        <div class="step-num-ring">
+                            <svg viewBox="0 0 100 100" class="step-ring-svg">
+                                <circle cx="50" cy="50" r="46" class="ring-bg" />
+                                <circle cx="50" cy="50" r="46" class="ring-fill" />
+                            </svg>
+                            <span class="step-num-text">01</span>
+                        </div>
+                        <div class="step-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                        </div>
+                        <h3 class="step-title">Upload Podcast</h3>
+                        <p class="step-desc">Drop your podcast video or paste a YouTube link. We handle the rest.</p>
+                    </div>
+
+                    <div class="step-card anim-item" data-anim="fade-up" data-delay="2">
+                        <div class="step-num-ring">
+                            <svg viewBox="0 0 100 100" class="step-ring-svg">
+                                <circle cx="50" cy="50" r="46" class="ring-bg" />
+                                <circle cx="50" cy="50" r="46" class="ring-fill" />
+                            </svg>
+                            <span class="step-num-text">02</span>
+                        </div>
+                        <div class="step-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 6v6l4 2" />
+                            </svg>
+                        </div>
+                        <h3 class="step-title">AI Detects Highlights</h3>
+                        <p class="step-desc">Our AI analyzes speech, emotion, and context to find the best moments.</p>
+                    </div>
+
+                    <div class="step-card anim-item" data-anim="fade-up" data-delay="4">
+                        <div class="step-num-ring">
+                            <svg viewBox="0 0 100 100" class="step-ring-svg">
+                                <circle cx="50" cy="50" r="46" class="ring-bg" />
+                                <circle cx="50" cy="50" r="46" class="ring-fill" />
+                            </svg>
+                            <span class="step-num-text">03</span>
+                        </div>
+                        <div class="step-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                        </div>
+                        <h3 class="step-title">Download Clips</h3>
+                        <p class="step-desc">Get clean, ready-to-post clips. No editing required.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ INFOGRAPHIC METRICS ═══════════════════ -->
+    <section class="metrics-section section">
+        <div class="container">
+            <div class="metrics-grid">
+                <div class="metric-card anim-item" data-anim="fade-up" data-delay="0">
+                    <div class="metric-bar-wrap">
+                        <div class="metric-bar" data-width="95"></div>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" data-count="95" data-suffix="%">0%</span>
+                        <span class="metric-label">Time Saved vs Manual Editing</span>
+                    </div>
+                </div>
+                <div class="metric-card anim-item" data-anim="fade-up" data-delay="1">
+                    <div class="metric-bar-wrap">
+                        <div class="metric-bar" data-width="88"></div>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" data-count="88" data-suffix="%">0%</span>
+                        <span class="metric-label">Creator Satisfaction Rate</span>
+                    </div>
+                </div>
+                <div class="metric-card anim-item" data-anim="fade-up" data-delay="2">
+                    <div class="metric-bar-wrap">
+                        <div class="metric-bar" data-width="75"></div>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" data-count="3" data-suffix="min">0min</span>
+                        <span class="metric-label">Average Processing Time</span>
+                    </div>
+                </div>
+                <div class="metric-card anim-item" data-anim="fade-up" data-delay="3">
+                    <div class="metric-bar-wrap">
+                        <div class="metric-bar" data-width="70"></div>
+                    </div>
+                    <div class="metric-info">
+                        <span class="metric-value" data-count="500" data-suffix="+">0+</span>
+                        <span class="metric-label">Clips Generated This Month</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ FEATURES ═══════════════════ -->
+    <section id="features" class="section">
+        <div class="container">
+            <div class="section-header anim-item" data-anim="fade-up">
+                <span class="section-tag">Features</span>
+                <h2 class="section-title">Everything you need to clip smarter</h2>
+                <p class="section-sub">Built specifically for regional language podcast creators.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="0" id="feature-highlight">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon
+                                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">AI Highlight Detection</h3>
+                    <p class="feature-desc">Automatically identifies the most engaging moments using advanced speech and
+                        context analysis.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">Machine Learning</span>
+                        <span class="feature-micro-tag">NLP</span>
+                    </div>
+                </div>
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="1" id="feature-lang">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">Tamil &amp; Hindi Support</h3>
+                    <p class="feature-desc">Native language understanding. No English-only bias — built for regional
+                        creators.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">தமிழ்</span>
+                        <span class="feature-micro-tag">हिन्दी</span>
+                    </div>
+                </div>
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="2" id="feature-fast">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">Fast Processing</h3>
+                    <p class="feature-desc">Get your clips in minutes, not hours. Optimized pipeline handles heavy files
+                        efficiently.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">Parallel</span>
+                        <span class="feature-micro-tag">GPU</span>
+                    </div>
+                </div>
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="3" id="feature-export">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                                <line x1="7" y1="2" x2="7" y2="22" />
+                                <line x1="17" y1="2" x2="17" y2="22" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">Clean Clip Export</h3>
+                    <p class="feature-desc">Download high-quality clips ready for Instagram Reels, YouTube Shorts, or
+                        any social platform.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">MP4</span>
+                        <span class="feature-micro-tag">HD</span>
+                    </div>
+                </div>
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="4" id="feature-noedit">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                                <path d="M9 12l2 2 4-4" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">No Manual Editing</h3>
+                    <p class="feature-desc">Skip the timeline scrubbing. ClipPods does the heavy lifting so you can
+                        focus on creating.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">Zero-Touch</span>
+                        <span class="feature-micro-tag">Auto</span>
+                    </div>
+                </div>
+                <div class="feature-card anim-item" data-anim="fade-up" data-delay="5" id="feature-segment">
+                    <div class="feature-icon-wrap">
+                        <div class="feature-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7" />
+                                <rect x="14" y="3" width="7" height="7" />
+                                <rect x="14" y="14" width="7" height="7" />
+                                <rect x="3" y="14" width="7" height="7" />
+                            </svg>
+                        </div>
+                        <div class="feature-icon-glow"></div>
+                    </div>
+                    <h3 class="feature-title">Smart Segmentation</h3>
+                    <p class="feature-desc">AI segments your podcast into logical topics and themes for contextually
+                        accurate clips.</p>
+                    <div class="feature-tag-row">
+                        <span class="feature-micro-tag">Semantic</span>
+                        <span class="feature-micro-tag">Context</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ DEMO ═══════════════════ -->
+    <section id="demo" class="section">
+        <div class="container">
+            <div class="section-header anim-item" data-anim="fade-up">
+                <span class="section-tag">Demo</span>
+                <h2 class="section-title">See ClipPods in action</h2>
+                <p class="section-sub">Watch how a 2-hour podcast becomes 10 viral clips.</p>
+            </div>
+            <div class="demo-player anim-item" data-anim="scale-in">
+                <div class="demo-frame" id="demo-video-frame">
+                    <div class="demo-placeholder" id="demo-placeholder-overlay">
+                        <div class="demo-play-ring">
+                            <svg viewBox="0 0 100 100" class="play-ring-svg">
+                                <circle cx="50" cy="50" r="46" />
+                            </svg>
+                            <div class="demo-play-btn" id="demo-play-btn">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="6 3 20 12 6 21 6 3" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="demo-overlay-text">
+                            <span class="demo-label">ClipPods Demo</span>
+                            <span class="demo-sublabel">Click to play</span>
+                        </div>
+                    </div>
+                    <div class="demo-ui-mockup">
+                        <div class="mockup-header">
+                            <div class="mockup-dots">
+                                <span></span><span></span><span></span>
+                            </div>
+                            <div class="mockup-url">app.clippods.com</div>
+                        </div>
+                        <div class="mockup-body">
+                            <div class="mockup-sidebar">
+                                <div class="mockup-sidebar-item active"></div>
+                                <div class="mockup-sidebar-item"></div>
+                                <div class="mockup-sidebar-item"></div>
+                            </div>
+                            <div class="mockup-content">
+                                <div class="mockup-waveform">
+                                    <div class="wave-bar" style="height:20%"></div>
+                                    <div class="wave-bar" style="height:45%"></div>
+                                    <div class="wave-bar" style="height:70%"></div>
+                                    <div class="wave-bar highlight" style="height:95%"></div>
+                                    <div class="wave-bar highlight" style="height:85%"></div>
+                                    <div class="wave-bar highlight" style="height:90%"></div>
+                                    <div class="wave-bar" style="height:40%"></div>
+                                    <div class="wave-bar" style="height:55%"></div>
+                                    <div class="wave-bar" style="height:30%"></div>
+                                    <div class="wave-bar" style="height:65%"></div>
+                                    <div class="wave-bar highlight" style="height:80%"></div>
+                                    <div class="wave-bar highlight" style="height:75%"></div>
+                                    <div class="wave-bar" style="height:35%"></div>
+                                    <div class="wave-bar" style="height:50%"></div>
+                                    <div class="wave-bar" style="height:25%"></div>
+                                    <div class="wave-bar" style="height:60%"></div>
+                                    <div class="wave-bar" style="height:42%"></div>
+                                    <div class="wave-bar" style="height:38%"></div>
+                                    <div class="wave-bar highlight" style="height:88%"></div>
+                                    <div class="wave-bar highlight" style="height:92%"></div>
+                                    <div class="wave-bar" style="height:45%"></div>
+                                    <div class="wave-bar" style="height:30%"></div>
+                                    <div class="wave-bar" style="height:55%"></div>
+                                    <div class="wave-bar" style="height:48%"></div>
+                                </div>
+                                <!-- Progress scanline -->
+                                <div class="mockup-scanline" id="mockup-scanline"></div>
+                                <div class="mockup-clips">
+                                    <div class="mockup-clip clip-anim" style="--clip-delay: 0s">
+                                        <div class="clip-thumb"></div>
+                                        <div class="clip-info">
+                                            <div class="clip-title-bar"></div>
+                                            <div class="clip-time-bar"></div>
+                                        </div>
+                                        <div class="clip-status">Ready</div>
+                                    </div>
+                                    <div class="mockup-clip clip-anim" style="--clip-delay: 0.3s">
+                                        <div class="clip-thumb"></div>
+                                        <div class="clip-info">
+                                            <div class="clip-title-bar"></div>
+                                            <div class="clip-time-bar"></div>
+                                        </div>
+                                        <div class="clip-status processing">Processing</div>
+                                    </div>
+                                    <div class="mockup-clip clip-anim" style="--clip-delay: 0.6s">
+                                        <div class="clip-thumb"></div>
+                                        <div class="clip-info">
+                                            <div class="clip-title-bar"></div>
+                                            <div class="clip-time-bar"></div>
+                                        </div>
+                                        <div class="clip-status">Ready</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ PRICING ═══════════════════ -->
+    <section id="pricing" class="section">
+        <div class="container">
+            <div class="section-header anim-item" data-anim="fade-up">
+                <span class="section-tag">Pricing</span>
+                <h2 class="section-title">Simple, transparent pricing</h2>
+                <p class="section-sub">Start free. Upgrade when you're ready.</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card anim-item" data-anim="fade-up" data-delay="0" id="pricing-free">
+                    <div class="pricing-header">
+                        <h3 class="pricing-plan">Free Trial</h3>
+                        <p class="pricing-desc">Try ClipPods risk-free</p>
+                    </div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$0</span>
+                        <span class="price-period">/ 1 clip</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            1 podcast upload
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            AI highlight detection
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Standard quality export
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Tamil & Hindi support
+                        </li>
+                    </ul>
+                    <a href="#" class="btn btn-outline pricing-btn magnetic" id="pricing-free-btn">Get Started</a>
+                </div>
+                <div class="pricing-card featured anim-item" data-anim="fade-up" data-delay="1" id="pricing-pro">
+                    <div class="pricing-badge">Most Popular</div>
+                    <div class="pricing-glow"></div>
+                    <div class="pricing-header">
+                        <h3 class="pricing-plan">Pro</h3>
+                        <p class="pricing-desc">For serious creators</p>
+                    </div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$19</span>
+                        <span class="price-period">/ month</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Unlimited uploads
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Priority processing
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            HD clip export
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Smart segmentation
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Batch processing
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            Priority support
+                        </li>
+                    </ul>
+                    <a href="#" class="btn btn-primary pricing-btn magnetic" id="pricing-pro-btn">
+                        <span class="btn-text">Start Free Trial</span>
+                        <span class="btn-shimmer"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ FEEDBACK ═══════════════════ -->
+    <section id="feedback" class="section">
+        <div class="container">
+            <div class="section-header anim-item" data-anim="fade-up">
+                <span class="section-tag">Feedback</span>
+                <h2 class="section-title">We'd love to hear from you</h2>
+                <p class="section-sub">Help us build the best clipping tool for creators.</p>
+            </div>
+            <form class="feedback-form anim-item" data-anim="fade-up" id="feedback-form">
+                <div class="form-group">
+                    <label for="feedback-email" class="form-label">Email</label>
+                    <input type="email" id="feedback-email" class="form-input" placeholder="you@example.com" required />
+                </div>
+                <div class="form-group">
+                    <label for="feedback-message" class="form-label">Message</label>
+                    <textarea id="feedback-message" class="form-textarea" rows="5"
+                        placeholder="Tell us what you think..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary form-submit magnetic" id="feedback-submit">
+                    <span class="btn-text">Send Feedback</span>
+                    <span class="btn-shimmer"></span>
+                </button>
+                <div class="form-success" id="form-success">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    Thank you! We'll get back to you soon.
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- ═══════════════════ FOOTER ═══════════════════ -->
+    <footer id="footer" class="footer">
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <a href="#" class="nav-brand">
+                        <span class="brand-clip">Clip</span><span class="brand-pods">Pods</span>
+                    </a>
+                    <p class="footer-tagline">AI-powered podcast clipping<br />for regional creators.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h4 class="footer-col-title">Product</h4>
+                        <ul>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#pricing">Pricing</a></li>
+                            <li><a href="#demo">Demo</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-col">
+                        <h4 class="footer-col-title">Company</h4>
+                        <ul>
+                            <li><a href="#feedback">Contact</a></li>
+                            <li><a href="#">Privacy</a></li>
+                            <li><a href="#">Terms</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 ClipPods. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" aria-label="Twitter" class="social-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path
+                                d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
+                        </svg>
+                    </a>
+                    <a href="#" aria-label="GitHub" class="social-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path
+                                d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
 </body>
+
 </html>
