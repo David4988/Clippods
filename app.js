@@ -481,7 +481,7 @@
      ║  SECTION B — APP DASHBOARD (app.html)        ║
      ╚═══════════════════════════════════════════════╝ */
 
-  var API_BASE = 'http://localhost:8000';
+  var API_BASE = '';
   var POLL_INTERVAL_MS = 3000;
 
   function initAppDashboard() {
