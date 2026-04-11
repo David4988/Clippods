@@ -21,6 +21,7 @@ ENV/
 *.env
 
 # Storage (runtime files – not committed)
+backend/backend/
 backend/storage/uploads/*
 backend/storage/outputs/*
 !backend/storage/uploads/.gitkeep
