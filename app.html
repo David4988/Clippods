@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipPods — Upload & Extract Highlights</title>
+    <link rel="stylesheet" href="app.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <a href="index.html" class="logo">ClipPods</a>
+    </header>
+
+    <main>
+        <!-- Upload Section -->
+        <section id="upload-section">
+            <h2>Upload Tamil Podcast</h2>
+            <div id="upload-area">
+                <input type="file" id="file-input" accept=".mp3,.wav,.m4a">
+                <button id="upload-btn" disabled>Upload & Process</button>
+            </div>
+            <p id="upload-status"></p>
+        </section>
+
+        <!-- Processing Status -->
+        <section id="status-section" style="display: none;">
+            <h2>Processing</h2>
+            <div id="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+            <p id="status-text">Queued...</p>
+        </section>
+
+        <!-- Results / Clip Cards -->
+        <section id="results-section" style="display: none;">
+            <h2>Highlight Clips</h2>
+            <div id="clips-container"></div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
