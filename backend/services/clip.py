@@ -1,87 +1,108 @@
+# backend/services/clip.py
+
 """
-clip.py – ML Engineer 2 (FFmpeg Extraction)
-Responsibilities: take a Segment + source video → render & save .mp4 clip
+clip.py – ML Engineer 2 (Clip Extractor)
+Responsibilities: Cut audio/video at exact timestamps via FFmpeg
 """
 
-import os
 import asyncio
-from backend.models import Segment, Clip
-from backend.config import STORAGE_ROOT
+import os
+from typing import List, Tuple
+
+from config import STORAGE_ROOT
 
 OUTPUTS_DIR = os.path.join(STORAGE_ROOT, "outputs")
 
+# Limit concurrent FFmpeg processes to avoid OOM on low-resource machines
+_ffmpeg_semaphore = asyncio.Semaphore(3)
 
-async def render_clip(segment: Segment, video_path: str, job_id: str, clip_index: int) -> Clip:
+
+async def generate_clips(
+    input_file: str,
+    segments,
+    video_id: str,
+) -> List[Tuple[int, str]]:
     """
-    ML Engineer 2 – Clip Rendering Node
-    ─────────────────────────────────────
-    Extracts a time-bounded segment from the source video using FFmpeg
-    and writes it to backend/storage/outputs/.
+    Generate video clips using FFmpeg (parallel async subprocess).
 
     Args:
-        segment:     A scored Segment (start_time, end_time, id).
-        video_path:  Path to the original source .mp4 file.
-        job_id:      Parent job UUID (used for output filename).
-        clip_index:  Index of this clip within the job (0-based).
+        input_file: path to original video/audio
+        segments:   list of Segment objects with start_time / end_time
+        video_id:   unique job identifier for output filenames
 
     Returns:
-        Clip model pointing to the rendered .mp4 file.
+        list of (segment_index, output_path) tuples — only successfully
+        rendered clips are included, preserving correct index mapping.
     """
     os.makedirs(OUTPUTS_DIR, exist_ok=True)
-    out_filename = f"{job_id}_clip{clip_index}.mp4"
-    out_path = os.path.join(OUTPUTS_DIR, out_filename)
-    duration = segment.end_time - segment.start_time
 
-    print(f"[ML-ENG-2] Rendering clip {clip_index}: {segment.start_time:.1f}s → {segment.end_time:.1f}s")
+    async def _cut_clip(i: int, seg) -> Tuple[int, str] | None:
+        async with _ffmpeg_semaphore:
+            # Validate timestamps
+            if seg.end_time <= seg.start_time:
+                print(f"[CLIP] ❌ Invalid segment {i}: start >= end")
+                return None
 
-    # ── Production FFmpeg command ─────────────────────────────────────────────
-    # cmd = [
-    #     "ffmpeg", "-y",
-    #     "-ss", str(segment.start_time),
-    #     "-i", video_path,
-    #     "-t", str(duration),
-    #     "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-    #     "-c:a", "aac", "-b:a", "128k",
-    #     out_path,
-    # ]
-    # proc = await asyncio.create_subprocess_exec(
-    #     *cmd,
-    #     stdout=asyncio.subprocess.DEVNULL,
-    #     stderr=asyncio.subprocess.PIPE,
-    # )
-    # _, stderr = await proc.communicate()
-    # if proc.returncode != 0:
-    #     raise RuntimeError(f"FFmpeg failed: {stderr.decode()}")
-    # ─────────────────────────────────────────────────────────────────────────
+            output_path = os.path.join(OUTPUTS_DIR, f"clip_{video_id}_{i}.mp4")
 
-    # Mock: touch an empty file so the pipeline can continue end-to-end
-    await asyncio.sleep(0.5)
-    open(out_path, "a").close()
+            print(f"\n[CLIP] ▶ Cutting clip {i}")
+            print(f"[CLIP] Input:  {input_file}")
+            print(f"[CLIP] Range:  {seg.start_time}s → {seg.end_time}s")
+            print(f"[CLIP] Output: {output_path}")
 
-    return Clip(
-        id=f"{job_id}_clip{clip_index}",
-        segment_id=segment.id,
-        start_time=segment.start_time,
-        end_time=segment.end_time,
-        file_path=out_path,
-        duration=duration,
-    )
+            command = [
+                "ffmpeg",
+                "-y",
+                "-ss", str(seg.start_time),   # fast seek
+                "-to", str(seg.end_time),
+                "-i", input_file,
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-preset", "fast",
+                "-loglevel", "error",
+                output_path,
+            ]
 
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
 
-async def render_clips(segments: list[Segment], video_path: str, job_id: str) -> list[Clip]:
-    """
-    Render all highlight segments concurrently.
+                _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
 
-    Args:
-        segments:   Top-N scored Segment objects from select_highlights().
-        video_path: Source video .mp4 path.
-        job_id:     Parent job UUID.
+                if proc.returncode != 0:
+                    print(f"[CLIP] ❌ FFmpeg error clip {i}: {stderr.decode()}")
 
-    Returns:
-        List of Clip objects for every rendered file.
-    """
-    tasks = [
-        render_clip(seg, video_path, job_id, idx)
-        for idx, seg in enumerate(segments)
-    ]
-    return list(await asyncio.gather(*tasks))
+                    # Cleanup failed file
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+
+                    return None
+
+                print(f"[CLIP] ✅ Finished clip {i}")
+                return (i, output_path)
+
+            except asyncio.TimeoutError:
+                print(f"[CLIP] ❌ Clip {i} timed out (>300s)")
+
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+
+                return None
+
+            except Exception as e:
+                print(f"[CLIP] ❌ Exception clip {i}: {e}")
+
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+
+                return None
+
+    # Run all clips in parallel (bounded by _ffmpeg_semaphore)
+    tasks = [_cut_clip(i, seg) for i, seg in enumerate(segments)]
+    results = await asyncio.gather(*tasks)
+
+    # Return only successful (index, path) tuples
+    return [r for r in results if r is not None]

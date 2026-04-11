@@ -5,8 +5,8 @@ Responsibilities: chunk audio → Sarvam AI saaras:v3 → TranscriptChunk
 
 import asyncio
 import os
-from backend.models import TranscriptChunk, TranscriptWord
-from backend.config import SARVAM_API_KEY, DEFAULT_LANGUAGE
+from models import TranscriptChunk, TranscriptWord
+from config import SARVAM_API_KEY, DEFAULT_LANGUAGE
 
 # Production initialisation (uncomment when API key is available):
 # from sarvamai import SarvamAIClient

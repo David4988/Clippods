@@ -38,3 +38,5 @@ Thumbs.db
 
 # Logs
 *.log
+# Node (if frontend uses it later)
+node_modules/
