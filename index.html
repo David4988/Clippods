@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipPods – Viral Podcast Highlights</title>
+    <meta name="description" content="ClipPods automatically extracts viral highlight clips from Tamil, Telugu, and Hindi podcasts using AI transcription and smart segmentation.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+    <div class="glass-panel">
+        <div class="header-text">
+            <h1>ClipPods</h1>
+            <p>Automatically extract viral highlights from Tamil, Telugu, and Hindi podcasts.</p>
+        </div>
+
+        <div id="ingest-container">
+            <!-- URL Ingest Form -->
+            <form id="url-form">
+                <div class="input-group">
+                    <input type="url" id="youtube-url" class="input-field" placeholder="Paste YouTube Podcast Link..." required>
+                    <button type="submit" id="generate-btn" class="primary-btn">Generate Clips</button>
+                </div>
+            </form>
+
+            <div class="divider">OR UPLOAD RAW FILE</div>
+
+            <!-- File Upload Form -->
+            <div class="file-upload-wrapper">
+                <div class="file-upload-btn" id="upload-box">
+                    <span id="upload-text">Click to browse or drag & drop video/audio file</span>
+                </div>
+                <input type="file" id="file-upload" class="file-upload-input" accept="video/*,audio/*">
+            </div>
+        </div>
+
+        <!-- Processing Status -->
+        <div id="status-container">
+            <div class="loader"></div>
+            <p class="status-text" id="status-message">Extracting Audio & Analyzing Content...</p>
+            <p style="color: #a0aec0; font-size: 0.9rem; margin-top: 0.5rem;" id="loading-timer">00:00</p>
+        </div>
+    </div>
+
+    <!-- Results Area -->
+    <div id="results-container" class="glass-panel" style="background: rgba(0,0,0,0.4);">
+        <h2 class="results-title">🔥 Viral Highlights</h2>
+        <div class="clips-grid" id="clips-grid">
+            <!-- Clip Cards Injected via JS -->
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+</html>

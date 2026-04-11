@@ -1,0 +1,17 @@
+# ClipPods – Backend Dependencies
+# Run: pip install -r requirements.txt
+
+# ── Web Framework ─────────────────────────────────────────
+fastapi>=0.103.1
+uvicorn[standard]>=0.23.2
+python-multipart>=0.0.6     # multipart file uploads
+
+# ── AI / Transcription ────────────────────────────────────
+sarvamai>=0.1.0             # Sarvam AI client (saaras:v3)
+
+# ── Media Processing ──────────────────────────────────────
+yt-dlp>=2023.10.13          # YouTube downloading
+ffmpeg-python>=0.2.0        # FFmpeg Python bindings
+
+# ── Data Validation ───────────────────────────────────────
+pydantic>=2.4.2

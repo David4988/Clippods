@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipPods – App Dashboard</title>
+    <meta name="description" content="ClipPods app dashboard – upload podcasts and manage your generated viral clips.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+    <header class="app-header">
+        <span class="app-logo">ClipPods</span>
+        <nav>
+            <a href="/" class="nav-link">← Back to Home</a>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        <h1 class="app-title">Upload & Process</h1>
+        <p class="app-subtitle">Upload a podcast video or audio file to generate viral clips.</p>
+
+        <!-- Upload Panel -->
+        <div class="glass-panel upload-panel">
+            <div class="file-upload-wrapper">
+                <div class="file-upload-btn" id="app-upload-box">
+                    <span id="app-upload-text">📁 Click to browse or drag & drop video/audio file</span>
+                </div>
+                <input type="file" id="app-file-input" class="file-upload-input" accept="video/*,audio/*">
+            </div>
+            <button id="app-upload-btn" class="primary-btn" disabled>Process File</button>
+        </div>
+
+        <!-- Status Panel -->
+        <div id="app-status" class="glass-panel" style="display:none; text-align:center;">
+            <div class="loader"></div>
+            <p class="status-text" id="app-status-msg">Initializing...</p>
+            <p id="app-job-id" style="color:#a0aec0; font-size:0.8rem; margin-top:0.5rem;"></p>
+        </div>
+
+        <!-- Results Panel -->
+        <div id="app-results" class="glass-panel" style="display:none;">
+            <h2 class="results-title">🎬 Generated Clips</h2>
+            <div class="clips-grid" id="app-clips-grid"></div>
+        </div>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
