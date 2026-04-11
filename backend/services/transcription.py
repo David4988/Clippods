@@ -1,96 +1,198 @@
-"""
-ClipPods — Transcription Service (ML Engineer 1)
-Converts audio → timestamped Tamil transcript segments via Whisper API.
-"""
-
 import os
 import math
 import time
+import random
 import tempfile
-from openai import OpenAI
-from pydub import AudioSegment
+import requests
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from models import Segment
-from config import (
-    WHISPER_MODEL,
-    WHISPER_LANGUAGE,
-    WHISPER_MAX_FILE_BYTES,
-    CHUNK_DURATION_MIN,
-)
+from config import CHUNK_DURATION_MIN
 
-client = OpenAI()
-
+CHUNK_DURATION_SEC = CHUNK_DURATION_MIN * 60
 MAX_RETRIES = 3
-CHUNK_DURATION_MS = CHUNK_DURATION_MIN * 60 * 1000
 
 
 def transcribe(audio_path: str) -> list[Segment]:
-    """
-    Transcribe audio file to list of timestamped Segments.
-    Handles files > 25MB by splitting into chunks.
-    """
-    file_size = os.path.getsize(audio_path)
+    total_sec = _get_audio_duration(audio_path)
 
-    if file_size <= WHISPER_MAX_FILE_BYTES:
-        raw_segments = _call_whisper_with_retry(audio_path)
-        return _parse_segments(raw_segments, offset=0.0)
+    if total_sec <= CHUNK_DURATION_SEC:
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+
+            subprocess.run([
+                "ffmpeg", "-y", "-i", audio_path,
+                "-ar", "16000", "-ac", "1", tmp_path
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+
+            raw_segments = _call_sarvam(tmp_path)
+
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+        segments = _parse_segments(raw_segments, offset=0.0)
+
+        if not segments:
+            raise RuntimeError(f"No segments for {audio_path}")
+
+        return segments
+
     else:
         with tempfile.TemporaryDirectory() as temp_dir:
             chunks = _split_audio(audio_path, temp_dir)
+
+            def process_chunk(chunk_info):
+                try:
+                    raw = _call_sarvam(chunk_info["path"])
+                    return chunk_info["offset_sec"], _parse_segments(raw, chunk_info["offset_sec"])
+                except Exception:
+                    # fail-safe: skip chunk instead of killing full job
+                    return chunk_info["offset_sec"], []
+
+            results = []
+
+            max_workers = min(3, len(chunks))  # 🔥 controlled concurrency
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(process_chunk, c) for c in chunks]
+
+                for future in as_completed(futures):
+                    results.append(future.result())
+
+            results.sort(key=lambda x: x[0])
+
             all_segments = []
-            for chunk_info in chunks:
-                raw = _call_whisper_with_retry(chunk_info["path"])
-                segs = _parse_segments(raw, offset=chunk_info["offset_sec"])
+            for _, segs in results:
                 all_segments.extend(segs)
+
+            if not all_segments:
+                raise RuntimeError(f"No segments for {audio_path}")
+
             return all_segments
 
 
-def _call_whisper_with_retry(file_path: str) -> list:
-    """Call Whisper API with retry on failure."""
+# ---------------- SARVAM ---------------- #
+
+def _call_sarvam(file_path: str) -> list:
+    url = "https://api.sarvam.ai/speech-to-text"
+    headers = {"api-subscription-key": os.getenv("SARVAM_API_KEY")}
+
+    # 🔴 RETRY ONLY FOR JOB CREATION
     for attempt in range(MAX_RETRIES):
         try:
             with open(file_path, "rb") as f:
-                response = client.audio.transcriptions.create(
-                    model=WHISPER_MODEL,
-                    file=f,
-                    language=WHISPER_LANGUAGE,
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"],
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    files={"file": f},
+                    data={"language_code": "ta-IN", "model": "saaras:v3"},
+                    timeout=(5, 30)
                 )
-            return response.segments
+                response.raise_for_status()
+
+            job_id = response.json().get("job_id")
+            if not job_id:
+                raise RuntimeError("Missing job_id")
+
+            break
+
         except Exception as e:
             if attempt == MAX_RETRIES - 1:
-                raise RuntimeError(f"Whisper API failed after {MAX_RETRIES} attempts: {e}")
+                raise RuntimeError(f"Job submission failed: {e}")
             time.sleep(5 * (attempt + 1))
 
+    # 🔴 POLLING (NO RETRY LOOP HERE)
+    status_url = f"{url}/{job_id}"
+    start_poll = time.time()
 
-def _parse_segments(whisper_segments: list, offset: float) -> list[Segment]:
-    """Convert Whisper output to list[Segment] with timestamp offset."""
+    while True:
+        if (time.time() - start_poll) > 1800:
+            raise RuntimeError(f"Timeout for job {job_id}")
+
+        time.sleep(20 + random.uniform(0, 5))
+
+        res = requests.get(status_url, headers=headers, timeout=(5, 30))
+        res.raise_for_status()
+
+        data = res.json()
+        status = data.get("status", "").lower()
+
+        if status == "completed":
+            break
+        if status in ["failed", "error"]:
+            raise RuntimeError(f"Job failed: {data}")
+
+    # 🔴 SAFE PARSING
+    if "error" in data:
+        raise RuntimeError(f"Sarvam error: {data['error']}")
+
+    segments = data.get("segments")
+    if segments is None:
+        raise RuntimeError(f"Missing segments: {data.keys()}")
+
+    if segments:
+        first = segments[0]
+        if not ("start_time_seconds" in first or "start" in first):
+            raise RuntimeError("Missing timestamps")
+
+    return segments
+
+
+# ---------------- HELPERS ---------------- #
+
+def _parse_segments(raw, offset):
     return [
         Segment(
-            start_sec=round(seg.start + offset, 2),
-            end_sec=round(seg.end + offset, 2),
-            text=seg.text.strip(),
+            start_sec=round(seg.get("start_time_seconds", seg.get("start")) + offset, 2),
+            end_sec=round(seg.get("end_time_seconds", seg.get("end")) + offset, 2),
+            text=seg["text"].strip()
         )
-        for seg in whisper_segments
-        if seg.text.strip()
+        for seg in raw if seg["text"].strip()
     ]
 
 
-def _split_audio(audio_path: str, temp_dir: str) -> list[dict]:
-    """Split large audio into ≤10-minute chunks for Whisper API."""
-    audio = AudioSegment.from_file(audio_path)
-    total_ms = len(audio)
-    num_chunks = math.ceil(total_ms / CHUNK_DURATION_MS)
+def _get_audio_duration(path):
+    res = subprocess.run([
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", path
+    ], capture_output=True, text=True, check=True)
+
+    return float(res.stdout.strip())
+
+
+def _split_audio(path, temp_dir):
+    total_sec = _get_audio_duration(path)
+    num_chunks = math.ceil(total_sec / CHUNK_DURATION_SEC)
 
     chunks = []
+
     for i in range(num_chunks):
-        start_ms = i * CHUNK_DURATION_MS
-        end_ms = min((i + 1) * CHUNK_DURATION_MS, total_ms)
-        chunk = audio[start_ms:end_ms]
-        chunk_path = os.path.join(temp_dir, f"chunk_{i}.mp3")
-        chunk.export(chunk_path, format="mp3", bitrate="64k")
-        chunks.append({"path": chunk_path, "offset_sec": start_ms / 1000.0})
+        start = i * CHUNK_DURATION_SEC
+        out = os.path.join(temp_dir, f"chunk_{i}.wav")
+
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-ss", str(start),
+            "-t", str(CHUNK_DURATION_SEC),
+            "-i", path,
+            "-ar", "16000",
+            "-ac", "1",
+            out
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+
+        chunks.append({
+            "path": out,
+            "offset_sec": start
+        })
+
     return chunks

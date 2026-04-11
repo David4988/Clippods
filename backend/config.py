@@ -3,18 +3,16 @@ ClipPods — Configuration
 """
 
 import os
+from dotenv import load_dotenv
 
-# OpenAI API
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+load_dotenv()
 
-# Whisper settings
-WHISPER_MODEL = "whisper-1"
-WHISPER_LANGUAGE = "ta"
+# Sarvam API
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
 
 # Audio processing
 MAX_UPLOAD_SIZE_MB = 500
-CHUNK_DURATION_MIN = 10          # minutes per split chunk for Whisper
-WHISPER_MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MB
+CHUNK_DURATION_MIN = 55          # minutes per split chunk for Sarvam
 
 # Clip settings
 DEFAULT_MAX_CLIPS = 5
