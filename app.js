@@ -20,20 +20,33 @@ let currentJobId = null;
 let pollTimer = null;
 
 // --- Upload ---
-fileInput.addEventListener('change', () => {
-    uploadBtn.disabled = !fileInput.files.length;
-});
+function checkInputs() {
+    const file = fileInput.files[0];
+    const url = document.getElementById('youtube-url').value;
+    uploadBtn.disabled = !(file || url);
+}
+
+fileInput.addEventListener('change', checkInputs);
+document.getElementById('youtube-url').addEventListener('input', checkInputs);
 
 uploadBtn.addEventListener('click', async () => {
     const file = fileInput.files[0];
-    if (!file) return;
+    const url = document.getElementById('youtube-url').value;
+    if (!file && !url) return;
 
     uploadBtn.disabled = true;
-    uploadStatus.textContent = 'Uploading...';
+    uploadStatus.textContent = 'Queuing job...';
 
     try {
         const formData = new FormData();
-        formData.append('file', file);
+        if (file) {
+            formData.append('file', file);
+        }
+        if (url) {
+            formData.append('youtube_url', url);
+        }
+        formData.append('source_lang', document.getElementById('source-lang').value);
+        formData.append('target_lang', document.getElementById('target-lang').value);
 
         const res = await fetch(`${API_BASE}/jobs`, {
             method: 'POST',
@@ -79,6 +92,7 @@ async function pollStatus(jobId) {
 function formatStatus(status) {
     const map = {
         queued: 'Queued...',
+        downloading: 'Downloading from YouTube...',
         transcribing: 'Transcribing audio...',
         chunking: 'Finding highlight segments...',
         scoring: 'Scoring highlights...',
@@ -108,8 +122,8 @@ async function loadClips(jobId) {
                     <span class="clip-score">Score: ${(clip.score * 100).toFixed(0)}%</span>
                 </div>
                 <p class="clip-transcript">${clip.transcript}</p>
-                <audio class="clip-audio" controls src="${API_BASE}${clip.audio_url}"></audio>
-                <a class="clip-download" href="${API_BASE}${clip.audio_url}" download>Download</a>
+                <video class="clip-video" controls src="${API_BASE}${clip.audio_url}" style="width: 100%; max-height: 250px; border-radius: 8px; margin-top: 10px;"></video>
+                <a class="clip-download" href="${API_BASE}${clip.audio_url}" download>Download Video</a>
             `;
             clipsContainer.appendChild(card);
         });

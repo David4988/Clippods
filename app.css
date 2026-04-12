@@ -1,15 +1,14 @@
-/* ===== ClipPods — App UI Styles ===== */
-
 :root {
-    --bg-primary: #0a0a0f;
-    --bg-secondary: #12121a;
-    --bg-card: #1a1a2e;
-    --text-primary: #e8e8ed;
-    --text-secondary: #8b8b9e;
-    --accent: #6c5ce7;
-    --accent-glow: rgba(108, 92, 231, 0.3);
-    --success: #2ecc71;
-    --border: #2a2a3e;
+    --bg-primary: #09090e;
+    --bg-secondary: rgba(20, 20, 28, 0.6);
+    --bg-card: rgba(30, 30, 46, 0.5);
+    --text-primary: #f8f8fc;
+    --text-secondary: #a1a1b5;
+    --accent: #8b5cf6;
+    --accent-glow: rgba(139, 92, 246, 0.4);
+    --accent-hover: #9c72f7;
+    --success: #10b981;
+    --border: rgba(255, 255, 255, 0.08);
     --font-main: 'Inter', sans-serif;
 }
 
@@ -21,160 +20,325 @@
 
 body {
     font-family: var(--font-main);
-    background: var(--bg-primary);
+    background: radial-gradient(circle at 15% 50%, rgba(56, 32, 122, 0.2), transparent 40%),
+                radial-gradient(circle at 85% 30%, rgba(32, 122, 107, 0.15), transparent 40%),
+                var(--bg-primary);
+    background-attachment: fixed;
     color: var(--text-primary);
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
 header {
-    padding: 1rem 2rem;
+    padding: 1.5rem 3rem;
     border-bottom: 1px solid var(--border);
+    background: rgba(9, 9, 14, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 .logo {
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--accent);
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-primary);
     text-decoration: none;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    transition: all 0.3s ease;
 }
 
 main {
-    max-width: 800px;
-    margin: 2rem auto;
+    max-width: 860px;
+    margin: 3rem auto;
     padding: 0 1.5rem;
+    animation: fadeIn 0.6s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 section {
-    margin-bottom: 2rem;
+    margin-bottom: 3rem;
 }
 
 h2 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: #fff;
+    letter-spacing: -0.5px;
 }
 
 /* Upload Area */
 #upload-area {
     display: flex;
-    gap: 1rem;
-    align-items: center;
-    padding: 1.5rem;
+    flex-direction: column;
+    gap: 1.8rem;
+    padding: 2.5rem;
     background: var(--bg-secondary);
-    border: 1px dashed var(--border);
-    border-radius: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-#file-input {
-    flex: 1;
+#upload-area:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 20px var(--accent-glow);
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.input-group input[type="url"],
+.input-group input[type="file"] {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    padding: 12px 16px;
+    font-family: var(--font-main);
+    transition: all 0.3s ease;
+}
+
+.input-group input[type="url"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.options-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.option {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.option label {
+    font-size: 0.9rem;
+    font-weight: 500;
     color: var(--text-secondary);
+}
+
+.option select {
+    padding: 0.8rem 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 8px;
+    font-family: var(--font-main);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23a1a1b5%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem top 50%;
+    background-size: 0.65rem auto;
+}
+
+.option select:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.option select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 #upload-btn {
-    padding: 0.6rem 1.5rem;
-    background: var(--accent);
+    padding: 1rem 2rem;
+    margin-top: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), #6d28d9);
     color: #fff;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px var(--accent-glow);
+}
+
+#upload-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6);
+    background: linear-gradient(135deg, var(--accent-hover), #7c3aed);
 }
 
 #upload-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    background: var(--border);
 }
 
 #upload-status {
-    margin-top: 0.5rem;
+    margin-top: 1rem;
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    text-align: center;
 }
 
 /* Progress Bar */
 #progress-bar-container {
     width: 100%;
-    height: 8px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 5px;
     overflow: hidden;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
 }
 
 #progress-bar {
     height: 100%;
     width: 0%;
-    background: var(--accent);
-    border-radius: 4px;
-    transition: width 0.3s ease;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    border-radius: 5px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+#progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0) 100%);
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
 
 #status-text {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
+    color: var(--accent);
+    font-size: 1.05rem;
+    font-weight: 500;
+    text-align: center;
 }
 
 /* Clip Cards */
 #clips-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
 }
 
 .clip-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.2rem;
+    border-radius: 16px;
+    padding: 1.8rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: all 0.3s ease;
+    animation: slideUp 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.clip-card:nth-child(1) { animation-delay: 0.1s; }
+.clip-card:nth-child(2) { animation-delay: 0.2s; }
+.clip-card:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes slideUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.clip-card:hover {
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .clip-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.8rem;
+    margin-bottom: 1.2rem;
 }
 
 .clip-rank {
-    font-weight: 700;
-    font-size: 1.1rem;
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.3rem 0.8rem;
+    border-radius: 8px;
 }
 
 .clip-score {
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--success), #059669);
     color: #fff;
-    padding: 0.2rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 600;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
 }
 
 .clip-transcript {
     color: var(--text-secondary);
-    font-size: 0.9rem;
-    margin-bottom: 0.8rem;
-    line-height: 1.5;
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
 }
 
-.clip-audio {
+.clip-video {
     width: 100%;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1.2rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.05);
+    background: #000;
 }
 
 .clip-download {
-    display: inline-block;
-    padding: 0.4rem 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.8rem 1.5rem;
     background: transparent;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
     text-decoration: none;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: background 0.2s;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 
 .clip-download:hover {
-    background: var(--accent);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--accent);
+    color: var(--accent);
 }
+

@@ -16,9 +16,39 @@
     <main>
         <!-- Upload Section -->
         <section id="upload-section">
-            <h2>Upload Tamil Podcast</h2>
+            <h2>Upload Podcast</h2>
             <div id="upload-area">
-                <input type="file" id="file-input" accept=".mp3,.wav,.m4a">
+                <div class="input-group">
+                    <label for="youtube-url" style="display:block; margin-bottom: 5px;">YouTube URL (Overrides file if both provided)</label>
+                    <input type="url" id="youtube-url" placeholder="https://youtube.com/watch?v=..." style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                    <label for="file-input" style="display:block; margin-bottom: 5px;">Or Select Podcast File</label>
+                    <input type="file" id="file-input" accept=".mp3,.wav,.m4a,.mp4" style="display:block; width: 100%;">
+                </div>
+                
+                <div class="options-group">
+                    <div class="option">
+                        <label for="source-lang">Podcast Language:</label>
+                        <select id="source-lang">
+                            <option value="ta-IN">Tamil</option>
+                            <option value="hi-IN">Hindi</option>
+                            <option value="en-IN">English (Indian)</option>
+                            <option value="kn-IN">Kannada</option>
+                            <option value="ml-IN">Malayalam</option>
+                            <option value="te-IN">Telugu</option>
+                        </select>
+                    </div>
+                    <div class="option">
+                        <label for="target-lang">Translate to (Optional):</label>
+                        <select id="target-lang">
+                            <option value="">None</option>
+                            <option value="ta-IN">Tamil</option>
+                            <option value="hi-IN">Hindi</option>
+                            <option value="en-IN">English</option>
+                            <option value="ml-IN">Malayalam</option>
+                        </select>
+                    </div>
+                </div>
+
                 <button id="upload-btn" disabled>Upload & Process</button>
             </div>
             <p id="upload-status"></p>

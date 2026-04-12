@@ -5,10 +5,20 @@ ClipPods — Configuration
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from project root (parent of backend/) regardless of cwd
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
+load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
 # Sarvam API
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
+
+# FFmpeg setup (Windows fail-safe)
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+except ImportError:
+    pass
 
 # Audio processing
 MAX_UPLOAD_SIZE_MB = 500
@@ -26,8 +36,9 @@ SCORE_WEIGHT_ENERGY = 0.7
 SCORE_WEIGHT_DURATION = 0.3
 
 # Storage paths
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "storage", "uploads")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "storage", "outputs")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "storage", "outputs")
 
 # Server
 HOST = "0.0.0.0"

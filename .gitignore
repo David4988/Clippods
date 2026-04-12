@@ -1,0 +1,10 @@
+venv/
+.env
+__pycache__/
+*.pyc
+backend/storage/uploads/*
+backend/storage/outputs/*
+!backend/storage/uploads/.gitkeep
+!backend/storage/outputs/.gitkeep
+.vscode/
+test.mp3
