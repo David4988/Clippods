@@ -7,6 +7,8 @@ Used by: ML engineers, Backend, Frontend (via API JSON serialization)
 from dataclasses import dataclass
 
 
+from typing import List
+
 @dataclass
 class Segment:
     """Single Whisper transcript segment."""
@@ -23,6 +25,7 @@ class Chunk:
     end_sec: float
     text: str
     duration_sec: float
+    segments: List[Segment] = None
 
 
 @dataclass
@@ -34,5 +37,7 @@ class ScoredChunk:
     text: str
     duration_sec: float
     score: float            # 0.0–1.0 composite
-    energy_score: float     # 0.0–1.0 normalized RMS
     duration_score: float   # 0.0–1.0 fitness to 60s sweet spot
+    density_score: float    # 0.0-1.0 normalized speech density
+    proxy_score: float      # 0.0-1.0 normalized text energy proxy
+    segments: List[Segment] = None

@@ -136,9 +136,11 @@ def score_chunks(chunks: list[Chunk], audio_path: str) -> list[ScoredChunk]:
             end_sec=chunk.end_sec,
             text=chunk.text,
             duration_sec=chunk.duration_sec,
+            segments=chunk.segments,
             score=round(composite, 4),
-            energy_score=round(energy_score, 4),
             duration_score=round(duration_score, 4),
+            density_score=round(density_score, 4),
+            proxy_score=round(proxy_score, 4),
         ))
 
     scored.sort(key=lambda x: x.score, reverse=True)
@@ -176,3 +178,77 @@ def _default_scored_chunks(chunks: list[Chunk]) -> list[ScoredChunk]:
             duration_score=0.5,
         ))
     return scored
+
+
+def select_highlights(scored_chunks: list[ScoredChunk], top_n: int = 5) -> list[ScoredChunk]:
+    """
+    Select diverse highlights using temporal bucketing.
+    """
+    if not scored_chunks:
+        return []
+
+    # Task 4.1: Sort descending by score
+    scored_chunks.sort(key=lambda x: x.score, reverse=True)
+
+    # Task 4.2: Temporal Diversity
+    total_length = max(c.end_sec for c in scored_chunks)
+    if total_length <= 0:
+        return scored_chunks[:top_n]
+
+    bucket_size = total_length / top_n
+    buckets = [[] for _ in range(top_n)]
+
+    for chunk in scored_chunks:
+        b_idx = min(int(chunk.start_sec / bucket_size), top_n - 1)
+        buckets[b_idx].append(chunk)
+
+    selected = []
+    # Pick highest scoring chunk from each bucket (already sorted globally)
+    for b in buckets:
+        if b:
+            selected.append(b[0])
+
+    # Fill empty buckets from the global pool
+    if len(selected) < top_n:
+        for chunk in scored_chunks:
+            if chunk not in selected:
+                selected.append(chunk)
+            if len(selected) == top_n:
+                break
+
+    # Sort sequentially for final presentation
+    selected.sort(key=lambda x: x.start_sec)
+    return selected
+
+
+def format_highlights_for_json(selected_chunks: list[ScoredChunk]) -> list[dict]:
+    """
+    Map selected chunks to the final API-ready JSON format.
+    """
+    output = []
+    for chunk in selected_chunks:
+        preview = chunk.text[:100] + ("..." if len(chunk.text) > 100 else "")
+        output.append({
+            "chunk_id": chunk.chunk_id,
+            "start_sec": round(chunk.start_sec, 2),
+            "end_sec": round(chunk.end_sec, 2),
+            "duration_sec": round(chunk.duration_sec, 2),
+            "transcript_preview": preview,
+            "score": round(chunk.score, 2),
+            "details": {
+                "duration_score": round(chunk.duration_score, 2),
+                "density_score": round(chunk.density_score, 2),
+                "proxy_score": round(chunk.proxy_score, 2)
+            }
+        })
+    return output
+
+
+def generate_highlights(segments: list[Segment], top_n: int = 5) -> list[dict]:
+    """
+    Orchestrate the entire ML2 pipeline from chunking to final API mapping.
+    """
+    chunks = chunk_transcript(segments)
+    scored = score_chunks(chunks)
+    selected = select_highlights(scored, top_n)
+    return format_highlights_for_json(selected)

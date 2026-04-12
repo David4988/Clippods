@@ -38,7 +38,18 @@ app.add_middleware(
 _ROOT_DIR = str(Path(__file__).resolve().parent.parent)
 
 # In-memory job store (no database for MVP)
-jobs: dict[str, dict] = {}
+jobs: dict[str, JobState] = {}
+PIPELINE_SEMAPHORE = asyncio.Semaphore(2)  # matches ML1 max_workers=2
+
+
+@app.on_event("startup")
+async def startup_cleanup():
+    """Wipe orphan upload/temp files from previous crashes."""
+    for d in [UPLOAD_DIR]:
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+            log.info(f"Startup cleanup: wiped {d}")
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/health")
 async def health():
@@ -87,18 +98,22 @@ async def create_job(
     return {"job_id": job_id, "status": "queued"}
 
 
-@app.get("/jobs/{job_id}")
+@app.get("/status/{job_id}")
 async def get_status(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    return jobs[job_id]
+    job = jobs[job_id]
+    return {"status": job.status, "progress": job.progress}
 
 
-@app.get("/jobs/{job_id}/clips")
-async def get_clips(job_id: str):
+@app.get("/results/{job_id}")
+async def get_results(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"clips": jobs[job_id]["clips"]}
+    job = jobs[job_id]
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job is not completed yet")
+    return {"clips": job.clips}
 
 
 @app.get("/clips/{job_id}/{filename}")
@@ -175,11 +190,11 @@ def process_job(job_id: str, audio_path: Optional[str], youtube_url: Optional[st
             print("WARNING No scored chunks — completing with 0 clips")
             return
 
-        # Step 4: Extract top clips
-        jobs[job_id]["status"] = "extracting"
-        jobs[job_id]["progress"] = 80
-        clips_dir = os.path.join(OUTPUT_DIR, job_id, "clips")
-        os.makedirs(clips_dir, exist_ok=True)
+            # Task 4.1: FFmpeg Extraction Loop
+            job.status = "generating_clips"
+            job.progress = 80
+            clips_dir = os.path.join(OUTPUT_DIR, job_id, "clips")
+            os.makedirs(clips_dir, exist_ok=True)
 
         clip_results = []
         for i, sc in enumerate(scored[:5]):

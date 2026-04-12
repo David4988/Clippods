@@ -1,23 +1,21 @@
-// ===== ClipPods — App UI Script =====
-// Handles: upload, polling, clip display
+/* ═══════════════════════════════════════════════════
+   ClipPods — Integrated Application Logic
+   Landing page: cursor glow, parallax grid, animated counters,
+     text reveals, scroll animations, magnetic buttons,
+     metric bars, connector line, waveform, form handling
+   App dashboard: file upload, status polling, clip display
+   ═══════════════════════════════════════════════════ */
 
-const API_BASE = 'http://localhost:8000';
-const POLL_INTERVAL_MS = 3000;
+(function () {
+  'use strict';
 
-// --- DOM Elements ---
-const fileInput = document.getElementById('file-input');
-const uploadBtn = document.getElementById('upload-btn');
-const uploadStatus = document.getElementById('upload-status');
-const uploadSection = document.getElementById('upload-section');
-const statusSection = document.getElementById('status-section');
-const progressBar = document.getElementById('progress-bar');
-const statusText = document.getElementById('status-text');
-const resultsSection = document.getElementById('results-section');
-const clipsContainer = document.getElementById('clips-container');
+  /* ╔═══════════════════════════════════════════════╗
+     ║  SECTION A — LANDING PAGE (index.html)        ║
+     ╚═══════════════════════════════════════════════╝ */
 
-// --- State ---
-let currentJobId = null;
-let pollTimer = null;
+  // ═══════════════════ PAGE LOADER ═══════════════════
+  var loader = document.getElementById('page-loader');
+  var loaderDone = false;
 
 // --- Upload ---
 function checkInputs() {
@@ -48,46 +46,46 @@ uploadBtn.addEventListener('click', async () => {
         formData.append('source_lang', document.getElementById('source-lang').value);
         formData.append('target_lang', document.getElementById('target-lang').value);
 
-        const res = await fetch(`${API_BASE}/jobs`, {
-            method: 'POST',
-            body: formData,
+        var res = await fetch(API_BASE + '/upload', {
+          method: 'POST',
+          body: formData,
         });
-        const data = await res.json();
+        var data = await res.json();
         currentJobId = data.job_id;
 
         uploadSection.style.display = 'none';
         statusSection.style.display = 'block';
         startPolling(currentJobId);
-    } catch (err) {
-        uploadStatus.textContent = `Upload failed: ${err.message}`;
+      } catch (err) {
+        uploadStatus.textContent = 'Upload failed: ' + err.message;
         uploadBtn.disabled = false;
+      }
+    });
+
+    // --- Polling ---
+    function startPolling(jobId) {
+      pollTimer = setInterval(function () { pollStatus(jobId); }, POLL_INTERVAL_MS);
     }
-});
 
-// --- Polling ---
-function startPolling(jobId) {
-    pollTimer = setInterval(() => pollStatus(jobId), POLL_INTERVAL_MS);
-}
+    async function pollStatus(jobId) {
+      try {
+        var res = await fetch(API_BASE + '/status/' + jobId);
+        var data = await res.json();
 
-async function pollStatus(jobId) {
-    try {
-        const res = await fetch(`${API_BASE}/jobs/${jobId}`);
-        const data = await res.json();
-
-        progressBar.style.width = `${data.progress || 0}%`;
+        progressBar.style.width = (data.progress || 0) + '%';
         statusText.textContent = formatStatus(data.status);
 
         if (data.status === 'completed') {
-            clearInterval(pollTimer);
-            await loadClips(jobId);
+          clearInterval(pollTimer);
+          await loadClips(jobId);
         } else if (data.status === 'failed') {
-            clearInterval(pollTimer);
-            statusText.textContent = `Failed: ${data.error || 'Unknown error'}`;
+          clearInterval(pollTimer);
+          statusText.textContent = 'Failed: ' + (data.error || 'Unknown error');
         }
-    } catch (err) {
-        statusText.textContent = `Polling error: ${err.message}`;
+      } catch (err) {
+        statusText.textContent = 'Polling error: ' + err.message;
+      }
     }
-}
 
 function formatStatus(status) {
     const map = {
@@ -103,11 +101,11 @@ function formatStatus(status) {
     return map[status] || status;
 }
 
-// --- Display Clips ---
-async function loadClips(jobId) {
-    try {
-        const res = await fetch(`${API_BASE}/jobs/${jobId}/clips`);
-        const data = await res.json();
+    // --- Display Clips ---
+    async function loadClips(jobId) {
+      try {
+        var res = await fetch(API_BASE + '/results/' + jobId);
+        var data = await res.json();
 
         statusSection.style.display = 'none';
         resultsSection.style.display = 'block';
@@ -127,7 +125,16 @@ async function loadClips(jobId) {
             `;
             clipsContainer.appendChild(card);
         });
-    } catch (err) {
-        statusText.textContent = `Failed to load clips: ${err.message}`;
+      } catch (err) {
+        statusText.textContent = 'Failed to load clips: ' + err.message;
+      }
     }
-}
+
+    function fmtTime(s) {
+      if (typeof s !== 'number') return '--:--';
+      return String(Math.floor(s / 60)).padStart(2, '0') + ':' +
+             String(Math.floor(s % 60)).padStart(2, '0');
+    }
+  }
+
+})();
