@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClipPods — AI Video Clipper</title>
+  <meta name="description" content="Paste a video URL or upload a file and get 3 highlight clips in seconds, powered by Sarvam AI." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0b0b14;
+      --surface:     rgba(255,255,255,0.045);
+      --surface-hov: rgba(255,255,255,0.075);
+      --border:      rgba(255,255,255,0.08);
+      --accent-1:    #7c3aed;
+      --accent-2:    #4f46e5;
+      --accent-glow: rgba(124,58,237,0.35);
+      --accent-grad: linear-gradient(135deg, #7c3aed, #4f46e5);
+      --text:        #f1f1f8;
+      --text-muted:  rgba(241,241,248,0.45);
+      --danger:      #f87171;
+      --danger-bg:   rgba(248,113,113,0.1);
+      --success:     #34d399;
+      --radius:      14px;
+      --radius-sm:   8px;
+      --shadow:      0 24px 64px rgba(0,0,0,0.55);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 80px;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 40% at 80% 90%, rgba(79,70,229,0.12) 0%, transparent 60%);
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+      animation: fadeDown .5s ease both;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: var(--accent-grad);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: 800;
+      background: var(--accent-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 400;
+      max-width: 420px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────────────── */
+    .card {
+      width: 100%;
+      max-width: 560px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      animation: fadeUp .5s .1s ease both;
+    }
+
+    /* ── Mode tabs ───────────────────────────────────────────────────────── */
+    .mode-tabs {
+      display: flex;
+      gap: 6px;
+      background: rgba(255,255,255,0.04);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 8px 0;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+
+    .tab-btn.active {
+      background: var(--accent-grad);
+      color: #fff;
+      box-shadow: 0 2px 12px var(--accent-glow);
+    }
+
+    .tab-btn:not(.active):hover {
+      background: var(--surface-hov);
+      color: var(--text);
+    }
+
+    /* ── Form panels ─────────────────────────────────────────────────────── */
+    .panel {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .panel.active { display: flex; }
+
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 6px;
+      letter-spacing: .02em;
+    }
+
+    input[type="url"],
+    input[type="file"] {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+
+    input[type="url"] {
+      padding: 11px 14px;
+    }
+
+    input[type="url"]:focus {
+      border-color: var(--accent-1);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    input[type="url"]::placeholder { color: var(--text-muted); }
+
+    /* File drop zone */
+    .file-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-sm);
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+
+    .file-zone:hover, .file-zone.drag-over {
+      border-color: var(--accent-1);
+      background: rgba(124,58,237,0.06);
+    }
+
+    .file-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+
+    .file-icon { font-size: 28px; margin-bottom: 8px; }
+    .file-zone p { color: var(--text-muted); font-size: 13.5px; }
+    .file-zone span { color: var(--accent-1); font-weight: 500; }
+    .file-name {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--success);
+      font-weight: 500;
+      min-height: 18px;
+    }
+
+    /* ── Submit button ───────────────────────────────────────────────────── */
+    #submit-btn {
+      width: 100%;
+      padding: 13px;
+      margin-top: 6px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--accent-grad);
+      color: #fff;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .15s, box-shadow .2s;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      letter-spacing: .01em;
+    }
+
+    #submit-btn:hover:not(:disabled) {
+      opacity: .92;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 28px var(--accent-glow);
+    }
+
+    #submit-btn:active:not(:disabled) { transform: translateY(0); }
+
+    #submit-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── Warning banner ──────────────────────────────────────────────────── */
+    #validation-warning {
+      display: none;
+      background: var(--danger-bg);
+      border: 1px solid rgba(248,113,113,0.25);
+      color: var(--danger);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 13.5px;
+      margin-top: 4px;
+      animation: shake .35s ease;
+    }
+
+    /* ── Loading indicator ───────────────────────────────────────────────── */
+    #loading-indicator {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 36px 0 20px;
+      animation: fadeUp .3s ease both;
+    }
+
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(124,58,237,0.2);
+      border-top-color: var(--accent-1);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .loading-steps {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #loading-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    #loading-sub {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    /* ── Error display ───────────────────────────────────────────────────── */
+    #error-display {
+      display: none;
+      max-width: 560px;
+      width: 100%;
+      margin-top: 20px;
+      background: var(--danger-bg);
+      border: 1px solid rgba(248,113,113,0.25);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: none;
+      align-items: flex-start;
+      gap: 12px;
+      animation: fadeUp .3s ease both;
+    }
+
+    .error-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+    .error-text { font-size: 14px; color: var(--danger); line-height: 1.5; }
+    .error-text strong { display: block; font-weight: 600; margin-bottom: 2px; }
+
+    /* ── Results ─────────────────────────────────────────────────────────── */
+    #results-container {
+      display: none;
+      width: 100%;
+      max-width: 1080px;
+      margin-top: 36px;
+      animation: fadeUp .4s ease both;
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .results-header h2 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .badge {
+      background: rgba(52,211,153,0.15);
+      color: var(--success);
+      border: 1px solid rgba(52,211,153,0.25);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .clips-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .clip-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: transform .2s, box-shadow .2s;
+      animation: fadeUp .4s ease both;
+    }
+
+    .clip-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 32px 72px rgba(0,0,0,0.7);
+    }
+
+    .clip-card video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+    }
+
+    .clip-label {
+      padding: 12px 16px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .clip-num {
+      background: var(--accent-grad);
+      color: #fff;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .clip-actions {
+      padding: 0 16px 14px;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      text-decoration: none;
+      background: transparent;
+      transition: border-color .2s, color .2s, background .2s;
+      cursor: pointer;
+    }
+
+    .download-btn:hover {
+      border-color: var(--accent-1);
+      color: var(--text);
+      background: rgba(124,58,237,0.08);
+    }
+
+    /* ── Animations ──────────────────────────────────────────────────────── */
+    @keyframes fadeDown  { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
+    @keyframes fadeUp    { from { opacity: 0; transform: translateY(16px);  } to { opacity: 1; transform: none; } }
+    @keyframes spin      { to { transform: rotate(360deg); } }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%,60% { transform: translateX(-6px); }
+      40%,80% { transform: translateX(6px); }
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: 60px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      text-align: center;
+    }
+
+    footer a { color: var(--accent-1); text-decoration: none; }
+
+    @media (max-width: 480px) {
+      body { padding: 28px 12px 60px; }
+      .card { padding: 22px 18px; }
+      .clips-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">✂️</div>
+      <span class="logo-text">ClipPods</span>
+    </div>
+    <p>Drop a video URL or upload a file — get 3 AI-selected highlight clips in seconds.</p>
+  </header>
+
+  <!-- ── Main form card ─────────────────────────────────────────────────── -->
+  <div class="card">
+    <!-- Mode tabs — Task 2.4: switching resets the other field -->
+    <div class="mode-tabs" role="tablist" aria-label="Input mode">
+      <button class="tab-btn active" id="tab-url" role="tab" aria-selected="true"  aria-controls="panel-url"  onclick="switchTab('url')">🔗 Video URL</button>
+      <button class="tab-btn"        id="tab-file" role="tab" aria-selected="false" aria-controls="panel-file" onclick="switchTab('file')">📁 Upload File</button>
+    </div>
+
+    <form id="upload-form" novalidate>
+
+      <!-- URL panel -->
+      <div class="panel active" id="panel-url" role="tabpanel" aria-labelledby="tab-url">
+        <div>
+          <label for="video-url">Paste a YouTube or direct video URL</label>
+          <input
+            type="url"
+            id="video-url"
+            placeholder="https://youtube.com/watch?v=..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
+
+      <!-- File panel -->
+      <div class="panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file">
+        <div>
+          <label>Upload a video file (MP4, MOV, WEBM…)</label>
+          <div class="file-zone" id="file-zone">
+            <input type="file" id="video-file" accept="video/*" aria-label="Upload video file" />
+            <div class="file-icon">🎬</div>
+            <p>Drag & drop here or <span>browse files</span></p>
+            <div class="file-name" id="file-name-display"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Validation warning — Task 2.3 -->
+      <div id="validation-warning" role="alert"></div>
+
+      <!-- Submit — Task 1.2 -->
+      <button type="submit" id="submit-btn">Generate Clips</button>
+
+    </form>
+
+    <!-- Loading indicator — Task 1.3 / 7.2 -->
+    <div id="loading-indicator" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="loading-steps">
+        <span id="loading-label">Processing your video…</span>
+        <span id="loading-sub">This may take 30–60 seconds</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Error display — Task 1.4 / 6.3 ────────────────────────────────── -->
+  <div id="error-display" role="alert">
+    <div class="error-icon">⚠️</div>
+    <div class="error-text">
+      <strong>Something went wrong</strong>
+      <span id="error-message"></span>
+    </div>
+  </div>
+
+  <!-- ── Results — Task 1.4 / 5.x ─────────────────────────────────────── -->
+  <section id="results-container" aria-label="Generated clips">
+    <div class="results-header">
+      <h2>Your Highlight Clips</h2>
+      <span class="badge" id="clip-count">3 clips</span>
+    </div>
+    <div class="clips-grid" id="clips-grid"></div>
+  </section>
+
+  <footer>
+    Powered by <a href="https://docs.sarvam.ai" target="_blank" rel="noopener">Sarvam AI</a> &amp; FFmpeg
+  </footer>
+
+  <script>
+    /* ── State ──────────────────────────────────────────────────────────── */
+    let activeMode = 'url';   // 'url' | 'file'
+
+    /* ── DOM refs ────────────────────────────────────────────────────────── */
+    const form          = document.getElementById('upload-form');
+    const videoUrlInput = document.getElementById('video-url');
+    const videoFileInput= document.getElementById('video-file');
+    const fileZone      = document.getElementById('file-zone');
+    const fileNameDisp  = document.getElementById('file-name-display');
+    const submitBtn     = document.getElementById('submit-btn');
+    const loadingEl     = document.getElementById('loading-indicator');
+    const loadingLabel  = document.getElementById('loading-label');
+    const loadingSub    = document.getElementById('loading-sub');
+    const errorDisplay  = document.getElementById('error-display');
+    const errorMessage  = document.getElementById('error-message');
+    const validationWarn= document.getElementById('validation-warning');
+    const resultsEl     = document.getElementById('results-container');
+    const clipsGrid     = document.getElementById('clips-grid');
+    const clipCount     = document.getElementById('clip-count');
+
+    /* ── Tab switching (Task 2.4 — reset the other field) ────────────────── */
+    function switchTab(mode) {
+      activeMode = mode;
+
+      document.getElementById('tab-url').classList.toggle('active', mode === 'url');
+      document.getElementById('tab-file').classList.toggle('active', mode === 'file');
+      document.getElementById('panel-url').classList.toggle('active', mode === 'url');
+      document.getElementById('panel-file').classList.toggle('active', mode === 'file');
+
+      // Reset the inactive field
+      if (mode === 'url') {
+        videoFileInput.value = '';
+        fileNameDisp.textContent = '';
+      } else {
+        videoUrlInput.value = '';
+      }
+
+      hideWarning();
+    }
+
+    /* ── File input UX ───────────────────────────────────────────────────── */
+    videoFileInput.addEventListener('change', () => {
+      const file = videoFileInput.files[0];
+      fileNameDisp.textContent = file ? `✓ ${file.name}` : '';
+    });
+
+    // Drag-and-drop
+    fileZone.addEventListener('dragover', e => { e.preventDefault(); fileZone.classList.add('drag-over'); });
+    fileZone.addEventListener('dragleave', () => fileZone.classList.remove('drag-over'));
+    fileZone.addEventListener('drop', e => {
+      e.preventDefault();
+      fileZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('video/')) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        videoFileInput.files = dt.files;
+        fileNameDisp.textContent = `✓ ${file.name}`;
+        switchTab('file');
+      }
+    });
+
+    /* ── Validation helpers ──────────────────────────────────────────────── */
+    function showWarning(msg) {
+      validationWarn.textContent = msg;
+      validationWarn.style.display = 'block';
+    }
+    function hideWarning() { validationWarn.style.display = 'none'; }
+
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorDisplay.style.display = 'flex';
+    }
+    function hideError() { errorDisplay.style.display = 'none'; }
+
+    /* ── Loading state ───────────────────────────────────────────────────── */
+    const LOADING_STEPS = [
+      ['Downloading video…',    'Fetching from source URL'],
+      ['Extracting audio…',     'Converting to 16kHz WAV'],
+      ['Transcribing speech…',  'Powered by Sarvam AI'],
+      ['Selecting segments…',   'Finding highlight moments'],
+      ['Cutting clips…',        'Fast-seek stream copy via FFmpeg'],
+    ];
+
+    let stepTimer = null;
+
+    function startLoading() {
+      form.style.display = 'none';
+      loadingEl.style.display = 'flex';
+      hideError();
+      resultsEl.style.display = 'none';
+      submitBtn.disabled = true;
+
+      let i = 0;
+      const cycle = () => {
+        if (i < LOADING_STEPS.length) {
+          loadingLabel.textContent = LOADING_STEPS[i][0];
+          loadingSub.textContent   = LOADING_STEPS[i][1];
+          i++;
+        }
+        stepTimer = setTimeout(cycle, 5000);
+      };
+      cycle();
+    }
+
+    function stopLoading() {
+      clearTimeout(stepTimer);
+      loadingEl.style.display = 'none';
+      form.style.display = 'block';
+      submitBtn.disabled = false;
+    }
+
+    /* ── Task 5: renderClips ─────────────────────────────────────────────── */
+    function renderClips(clips) {
+      clipsGrid.innerHTML = '';
+      clipCount.textContent = `${clips.length} clip${clips.length !== 1 ? 's' : ''}`;
+
+      clips.forEach((name, i) => {
+        // Backend serves clips at /clips/<name>
+        const src = `/clips/${name}`;
+
+        const card = document.createElement('div');
+        card.className = 'clip-card';
+        card.style.animationDelay = `${i * 0.08}s`;
+
+        card.innerHTML = `
+          <video controls width="320" preload="metadata" aria-label="Clip ${i + 1}">
+            <source src="${src}" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+          <div class="clip-label">
+            <span class="clip-num">${i + 1}</span>
+            Clip ${i + 1} · ~20 seconds
+          </div>
+          <div class="clip-actions">
+            <a class="download-btn" href="${src}" download="${name}" aria-label="Download clip ${i + 1}">
+              ⬇ Download
+            </a>
+          </div>
+        `;
+
+        clipsGrid.appendChild(card);
+      });
+
+      resultsEl.style.display = 'block';
+      resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /* ── Task 3 + 4: submit handler ──────────────────────────────────────── */
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      hideWarning();
+      hideError();
+
+      const urlVal  = videoUrlInput.value.trim();
+      const hasUrl  = urlVal.length > 0;
+      const hasFile = videoFileInput.files.length > 0;
+
+      /* Task 2.2 / 2.3: exactly one must be filled */
+      if (!hasUrl && !hasFile) {
+        showWarning('Please provide a video URL or upload a file.');
+        return;
+      }
+      if (hasUrl && hasFile) {
+        showWarning('Please provide only a URL or only a file — not both.');
+        return;
+      }
+
+      startLoading();
+
+      try {
+        let response;
+
+        if (hasUrl) {
+          /* Task 3: JSON body → POST /process */
+          response = await fetch('/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ video_url: urlVal }),
+          });
+        } else {
+          /* Task 4: Multipart → POST /process/upload */
+          const formData = new FormData();
+          formData.append('file', videoFileInput.files[0]);
+          response = await fetch('/process/upload', {
+            method: 'POST',
+            // No Content-Type header — browser sets multipart boundary
+            body: formData,
+          });
+        }
+
+        /* Task 6.2: parse response */
+        const data = await response.json();
+
+        if (!response.ok) {
+          // Task 6.3: backend error → show {error: ...}
+          throw new Error(data.error || `Server error ${response.status}`);
+        }
+
+        renderClips(data.clips);
+
+      } catch (err) {
+        /* Task 6.1: network errors + backend errors */
+        let msg = err.message;
+        if (err instanceof TypeError) {
+          msg = 'Could not reach the server. Is the backend running?';
+        }
+        showError(msg);
+      } finally {
+        stopLoading();
+      }
+    });
+  </script>
+</body>
+</html>
