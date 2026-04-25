@@ -84,10 +84,10 @@ class TestSelectSegments:
             select_segments([], -10.0)
         assert exc_info.value.status_code == 400
 
-    def test_returns_at_most_num_clips(self):
+    def test_always_returns_num_clips(self):
         ts = [_seg(i * 5, i * 5 + 4) for i in range(20)]
         result = select_segments(ts, 120.0)
-        assert len(result) <= NUM_CLIPS
+        assert len(result) == NUM_CLIPS
 
     def test_returns_three_for_long_video(self):
         ts = [_seg(i * 10, i * 10 + 8) for i in range(12)]
@@ -154,17 +154,18 @@ class TestTimingValidation:
             assert seg["start"] >= 0.0, f"start < 0: {seg}"
             assert seg["end"] <= video_duration + 0.001, f"end > duration: {seg}"
 
-    def test_short_video_returns_single_clamped_clip(self):
-        """Video shorter than CLIP_DURATION → 1 clip capped at video length."""
+    def test_short_video_returns_three_clips(self):
         result = select_segments([], 15.0)
-        assert len(result) == 1
-        assert result[0]["start"] == 0.0
-        assert result[0]["end"] == pytest.approx(15.0)
+        assert len(result) == NUM_CLIPS
+
+        for seg in result:
+            assert seg["start"] == 0.0
+            assert seg["end"] == pytest.approx(15.0)
 
     def test_no_timestamps_uses_uniform_fallback(self):
         """Empty timestamps → uniform 3-window distribution."""
         result = select_segments([], 120.0)
-        assert len(result) <= NUM_CLIPS
+        assert len(result) == NUM_CLIPS
         for seg in result:
             width = round(seg["end"] - seg["start"], 6)
             assert width == pytest.approx(CLIP_DURATION, abs=0.01)

@@ -101,17 +101,20 @@ def generate_clips(
         out_path = run_dir / _CLIP_NAME_TEMPLATE.format(index=index)
 
         try:
+            fade_out_start = max(0, duration - 2.5)
+
             (
                 ffmpeg
-                # -ss BEFORE -i → fast seek (keyframe-accurate, no decode)
-                .input(str(src), ss=start, t=duration)
-                .output(
+                .input(str(src), ss=start)
+                .output(   
                     str(out_path),
-                    # Stream-copy: no re-encoding — fast and lossless
-                    vcodec="copy",
-                    acodec="copy",
-                    # Avoid B-frame timestamp issues with copy codec
-                    avoid_negative_ts="make_zero",
+                    t=duration,
+                    vcodec="libx264",
+                    acodec="aac",
+                    preset="fast",
+                    movflags="faststart",
+                    af=f"volume=0.9,afade=t=in:st=0:d=1.5,afade=t=out:st={fade_out_start}:d=2.5",
+                    vf=f"fade=t=in:st=0:d=1,fade=t=out:st={fade_out_start}:d=2"
                 )
                 .overwrite_output()
                 .run(quiet=True)

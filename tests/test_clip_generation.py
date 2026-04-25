@@ -172,20 +172,22 @@ class TestFFmpegCutting:
         segments = [_seg(10.5, 30.5)]
 
         mock_stream = MagicMock()
+        mock_input = MagicMock()
         mock_stream.output.return_value = mock_stream
+        mock_input.output.return_value = mock_stream
         mock_stream.overwrite_output.return_value = mock_stream
         mock_stream.run.return_value = None  # don't produce file → 500 expected
 
-        with patch("services.clip_generation.ffmpeg.input", return_value=mock_stream) as mock_input:
+        with patch("services.clip_generation.ffmpeg.input", return_value=mock_input):
             with pytest.raises(HTTPException):
                 generate_clips(str(video), segments)
 
-        call_kwargs = mock_input.call_args
-        assert call_kwargs[1].get("ss") == pytest.approx(10.5)
-        assert call_kwargs[1].get("t")  == pytest.approx(20.0)
+        call_kwargs = mock_input.output.call_args[1]
+        assert call_kwargs.get("ss") == pytest.approx(10.5)
+        assert call_kwargs.get("t")  == pytest.approx(20.0)
 
     def test_ffmpeg_uses_stream_copy(self, tmp_path):
-        """Output is configured with vcodec=copy and acodec=copy."""
+        """Output is configured with vcodec=libx264 and acodec=aac."""
         video = tmp_path / "source.mp4"
         video.write_bytes(b"fake")
         segments = [_seg(0, 20)]
@@ -201,8 +203,8 @@ class TestFFmpegCutting:
                 generate_clips(str(video), segments)
 
         output_call = mock_input.output.call_args
-        assert output_call[1].get("vcodec") == "copy"
-        assert output_call[1].get("acodec") == "copy"
+        assert output_call[1].get("vcodec") == "libx264"
+        assert output_call[1].get("acodec") == "aac"
 
     def test_returns_correct_number_of_paths(self, tmp_path):
         """Return list length equals number of input segments."""
