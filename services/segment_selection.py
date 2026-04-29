@@ -48,7 +48,26 @@ def _windows_overlap(a_start: float, a_end: float, b_start: float, b_end: float)
 def _extend_end(seg, video_duration):
     return min(seg["start"] + CLIP_DURATION + BUFFER, video_duration)
 
+def _align_end(ws, default_end, segments, video_duration):
+    search_limit = min(default_end + 2.0, video_duration)
 
+    best_end = default_end
+
+    for seg in segments:
+        seg_start = seg["start"]
+        seg_end = seg["end"]
+        text = seg.get("text", "").strip()
+
+        # only consider segments near end boundary
+        if default_end <= seg_end <= search_limit:
+            # 🔥 prefer sentence endings
+            if text.endswith((".", "!", "?")):
+                return seg_end
+
+            # fallback: slight extension if speech continues
+            best_end = seg_end
+
+    return best_end
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -71,30 +90,46 @@ def select_segments(
         and t["end"] >= t["start"]
     ]
 
-    # --- Selection ---
+    # --- Sliding Window Selection ---
     candidates = []
 
-    speech_count = 0
-    score = 0.0
+    STEP = 5.0  # stride
 
-    for t in valid_ts:
-        mid = (t["start"] + t["end"]) / 2.0
-        
-        if ws < MIN_START:
-            continue
-        if ws <= mid < we:
-            duration = t["end"] - t["start"]
-            text = t.get("text", "").strip()
+    t = MIN_START
 
-            if text:
-                speech_count += 1
-                score += _word_density(text, duration)
+    while t + CLIP_DURATION <= video_duration:
+        ws = t
+        we = t + CLIP_DURATION
 
-        # skip windows with no speech
+        speech_count = 0
+        score = 0.0
+        total_speech_duration = 0.0
+
+        for seg in valid_ts:
+            mid = (seg["start"] + seg["end"]) / 2.0
+
+            if ws <= mid < we:
+                duration = seg["end"] - seg["start"]
+                text = seg.get("text", "").strip()
+
+                if text:
+                    speech_count += 1
+                    total_speech_duration += duration
+                    score += _word_density(text, duration)
+
+        # ❌ skip empty or weak windows
         if speech_count == 0:
+            t += STEP
+            continue
+
+        # 🔥 ENERGY FILTER (this fixes your low-energy issue)
+        if total_speech_duration < 0.6 * CLIP_DURATION:
+            t += STEP
             continue
 
         candidates.append((score, ws, we))
+
+        t += STEP
 
     best = {}
     for score, ws, we in candidates:
@@ -133,9 +168,16 @@ def select_segments(
 
     # 🔥 APPLY CLEAN EXTENSION
     for seg in selected:
-        seg["end"] = min(
+        default_end = min(
             seg["start"] + CLIP_DURATION + BUFFER,
             seg["start"] + MAX_DURATION,
+            video_duration
+        )
+
+        seg["end"] = _align_end(
+            seg["start"],
+            default_end,
+            valid_ts,
             video_duration
         )
 
