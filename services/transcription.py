@@ -4,7 +4,13 @@ from pathlib import Path
 from typing import TypedDict
 
 from fastapi import HTTPException
-import whisper
+
+# Stub for whisper - not available on Python 3.14 yet
+try:
+    import whisper
+    model = whisper.load_model("base")
+except ImportError:
+    model = None
 
 # ---------------------------------------------------------------------------
 # Types
@@ -21,13 +27,6 @@ class TranscriptResult(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Whisper Model (load once)
-# ---------------------------------------------------------------------------
-
-model = whisper.load_model("base")
-
-
-# ---------------------------------------------------------------------------
 # Main function (REPLACEMENT)
 # ---------------------------------------------------------------------------
 
@@ -38,6 +37,14 @@ def transcribe(audio_path: str) -> TranscriptResult:
         raise HTTPException(
             status_code=400,
             detail=f"Audio file not found or empty: {audio_path}",
+        )
+
+    if model is None:
+        # Return stub data when whisper is not available (Python 3.14)
+        return TranscriptResult(
+            segments=[
+                Segment(start=0.0, end=30.0, text="[Transcription unavailable - whisper not installed]"),
+            ]
         )
 
     try:
