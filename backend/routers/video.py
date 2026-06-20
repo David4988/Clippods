@@ -71,8 +71,8 @@ def _error_response(exc: HTTPException) -> JSONResponse:
         # Sarvam / network errors → ASR failure message
         msg = "Audio not clear enough"
 
-    elif "too long" in detail or "max 45" in detail or "duration" in detail:
-        msg = "Video too long (max 45 minutes)"
+    elif "too long" in detail or "max 2" in detail or "duration" in detail:
+        msg = "Video too long (max 2 hours)"
 
     elif exc.status_code == 400:
         # Covers download failure, missing file, no audio track, corrupt video
@@ -106,7 +106,7 @@ async def _run_pipeline(
         logger.info("Pipeline: resolving video input")
         video_path = await get_video_input(video_url, upload)
 
-        # ── Duration guard (contract: max 15 minutes) ───────────────────────
+        # ── Duration guard (contract: max 2 hours) ─────────────────────────
         try:
             probe          = ffmpeg_lib.probe(str(video_path))
             video_duration = float(probe["format"]["duration"])
@@ -116,11 +116,11 @@ async def _run_pipeline(
                 detail=f"Could not read video duration: {exc}",
             ) from exc
 
-        MAX_DURATION = 45 * 60  # 2700 seconds
+        MAX_DURATION = 120 * 60  # 7200 seconds
         if video_duration > MAX_DURATION:
             raise HTTPException(
                 status_code=400,
-                detail="Video too long (max 45 minutes)",
+                detail="Video too long (max 2 hours)",
             )
         logger.info("Pipeline: video duration %.1fs — within limit", video_duration)
 

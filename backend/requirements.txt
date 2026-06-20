@@ -4,6 +4,7 @@ anyio==4.14.0
 certifi==2026.6.17
 click==8.4.1
 fastapi==0.137.2
+faster-whisper
 ffmpeg-python==0.2.0
 future==1.0.0
 h11==0.16.0

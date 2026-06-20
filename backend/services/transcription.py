@@ -5,10 +5,12 @@ from typing import TypedDict
 
 from fastapi import HTTPException
 
-# Stub for whisper - not available on Python 3.14 yet
+# ---------------------------------------------------------------------------
+# Faster-Whisper model initialisation
+# ---------------------------------------------------------------------------
 try:
-    import whisper
-    model = whisper.load_model("base")
+    from faster_whisper import WhisperModel
+    model = WhisperModel("base", device="cpu", compute_type="int8")
 except ImportError:
     model = None
 
@@ -27,7 +29,7 @@ class TranscriptResult(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Main function (REPLACEMENT)
+# Main function
 # ---------------------------------------------------------------------------
 
 def transcribe(audio_path: str) -> TranscriptResult:
@@ -40,15 +42,15 @@ def transcribe(audio_path: str) -> TranscriptResult:
         )
 
     if model is None:
-        # Return stub data when whisper is not available (Python 3.14)
+        # Return stub data when faster-whisper is not available
         return TranscriptResult(
             segments=[
-                Segment(start=0.0, end=30.0, text="[Transcription unavailable - whisper not installed]"),
+                Segment(start=0.0, end=30.0, text="[Transcription unavailable - faster-whisper not installed]"),
             ]
         )
 
     try:
-        result = model.transcribe(audio_path)
+        segments_generator, _info = model.transcribe(audio_path, beam_size=5)
     except Exception as exc:
         raise HTTPException(
             status_code=502,
@@ -57,10 +59,10 @@ def transcribe(audio_path: str) -> TranscriptResult:
 
     segments: list[Segment] = []
 
-    for seg in result.get("segments", []):
-        start = seg.get("start")
-        end = seg.get("end")
-        text = seg.get("text") or ""
+    for seg in segments_generator:
+        start = seg.start
+        end = seg.end
+        text = seg.text or ""
 
         if start is None or end is None:
             continue

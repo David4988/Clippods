@@ -259,37 +259,37 @@ class TestCleanup:
 
 class TestDurationGuard:
 
-    def test_rejects_video_longer_than_45_minutes(self, tmp_path):
-        """Video > 2700s → 400 with contract error string."""
+    def test_rejects_video_longer_than_2_hours(self, tmp_path):
+        """Video > 7200s → 400 with contract error string."""
         import ffmpeg as ffmpeg_module
 
         with patch("routers.video.get_video_input",
                    new=AsyncMock(return_value=tmp_path / "video.mp4")), \
              patch.object(ffmpeg_module, "probe",
-                          return_value={"format": {"duration": "2701.0"}}), \
+                          return_value={"format": {"duration": "7201.0"}}), \
              patch("routers.video.cleanup_file"):
 
             resp = client.post("/process", json={"video_url": "https://x.com/long.mp4"})
 
         assert resp.status_code == 400
         body = resp.json()
-        assert body["error"] == "Video too long (max 45 minutes)"
+        assert body["error"] == "Video too long (max 2 hours)"
         assert "detail" not in body
 
     def test_accepts_video_exactly_at_limit(self, tmp_path):
-        """Video at exactly 2700s → allowed through."""
+        """Video at exactly 7200s → allowed through."""
         import ffmpeg as ffmpeg_module
         patches = _pipeline_patches(tmp_path)
-        # Override probe to return exactly 2700s
+        # Override probe to return exactly 7200s
         import ffmpeg as fm
         for p in patches:
             if hasattr(p, "attribute") and p.attribute == "probe":
-                p.new = MagicMock(return_value={"format": {"duration": "2700.0"}})
+                p.new = MagicMock(return_value={"format": {"duration": "7200.0"}})
 
         with patch("routers.video.get_video_input",
                    new=AsyncMock(return_value=tmp_path / "video.mp4")), \
              patch.object(ffmpeg_module, "probe",
-                          return_value={"format": {"duration": "2700.0"}}), \
+                          return_value={"format": {"duration": "7200.0"}}), \
              patch("routers.video.extract_audio",
                    return_value=str(tmp_path / "audio.wav")), \
              patch("routers.video.transcribe",

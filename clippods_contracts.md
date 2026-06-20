@@ -9,7 +9,7 @@
 | Project         | ClipPods                                         |
 | Product type    | Micro SaaS — Highlight Clipper                   |
 | Goal            | Video → auto highlight clips                     |
-| Stack           | Python, FastAPI, ffmpeg, yt-dlp, Whisper (local) |
+| Stack           | Python, FastAPI, ffmpeg, yt-dlp, Faster-Whisper (local) |
 | Win condition   | `POST /process` returns 3 usable clips           |
 | Processing type | Fully synchronous                                |
 | Storage         | Local only                                       |
@@ -24,7 +24,7 @@
 | ------------------ | ---------------------------- |
 | Accepted params    | `video_url` OR `file`        |
 | Rule               | Exactly ONE must be provided |
-| Max video duration | 10–45 minutes                |
+| Max video duration | 10–120 minutes               |
 
 Invalid:
 
@@ -62,7 +62,7 @@ get_video_input()
     ↓
 extract_audio()
     ↓
-transcribe()  [Whisper]
+transcribe()  [Faster-Whisper]
     ↓
 select_segments()
     ↓
@@ -250,7 +250,7 @@ Output:
 
 | Rule       | Value                |
 | ---------- | -------------------- |
-| ASR        | Whisper (local only) |
+| ASR        | Faster-Whisper (local only) |
 | Processing | synchronous only     |
 | Storage    | local only           |
 | Clip count | always 3             |

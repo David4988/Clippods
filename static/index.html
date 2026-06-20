@@ -14,127 +14,151 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:          #0b0b14;
-      --surface:     rgba(255,255,255,0.045);
-      --surface-hov: rgba(255,255,255,0.075);
-      --border:      rgba(255,255,255,0.08);
-      --accent-1:    #7c3aed;
-      --accent-2:    #4f46e5;
-      --accent-glow: rgba(124,58,237,0.35);
-      --accent-grad: linear-gradient(135deg, #7c3aed, #4f46e5);
-      --text:        #f1f1f8;
-      --text-muted:  rgba(241,241,248,0.45);
-      --danger:      #f87171;
-      --danger-bg:   rgba(248,113,113,0.1);
-      --success:     #34d399;
-      --radius:      14px;
+      --bg:          #f8fafb;
+      --surface:     #ffffff;
+      --surface-hov: #f1f5f9;
+      --border:      #e2e8f0;
+      --accent-1:    #0891b2;
+      --accent-2:    #0e7490;
+      --accent-glow: rgba(8,145,178,0.1);
+      --accent-grad: linear-gradient(135deg, #0891b2, #0e7490);
+      --text:        #0f172a;
+      --text-muted:  #64748b;
+      --danger:      #dc2626;
+      --danger-bg:   #fee2e2;
+      --success:     #16a34a;
+      --success-bg:  #dcfce7;
+      --radius:      12px;
       --radius-sm:   8px;
-      --shadow:      0 24px 64px rgba(0,0,0,0.55);
+      --shadow-sm:   0 1px 2px 0 rgba(0,0,0,0.05);
+      --shadow:      0 10px 25px -5px rgba(0,0,0,0.08);
+      --shadow-lg:   0 20px 45px -10px rgba(0,0,0,0.1);
     }
 
     html { scroll-behavior: smooth; }
 
     body {
       font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
+      background: linear-gradient(to bottom, var(--bg), #ffffff);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 48px 16px 80px;
-      background-image:
-        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 70%),
-        radial-gradient(ellipse 60% 40% at 80% 90%, rgba(79,70,229,0.12) 0%, transparent 60%);
+      padding: 40px 16px 60px;
     }
 
     /* ── Header ─────────────────────────────────────────────────────────── */
     header {
       text-align: center;
-      margin-bottom: 40px;
-      animation: fadeDown .5s ease both;
+      margin-bottom: 48px;
+      animation: fadeDown 0.6s ease both;
     }
 
     .logo {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
 
     .logo-icon {
-      width: 44px; height: 44px;
+      width: 40px;
+      height: 40px;
       background: var(--accent-grad);
-      border-radius: 12px;
-      display: grid; place-items: center;
-      font-size: 22px;
-      box-shadow: 0 0 20px var(--accent-glow);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      box-shadow: var(--shadow);
+      transform: scale(1);
+      transition: transform 0.2s;
+    }
+
+    .logo:hover .logo-icon {
+      transform: scale(1.08);
     }
 
     .logo-text {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 800;
+      letter-spacing: -0.8px;
       background: var(--accent-grad);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      letter-spacing: -0.5px;
     }
 
     header p {
       color: var(--text-muted);
-      font-size: 15px;
-      font-weight: 400;
-      max-width: 420px;
+      font-size: 16px;
+      font-weight: 500;
+      max-width: 500px;
       margin: 0 auto;
       line-height: 1.6;
+      letter-spacing: -0.3px;
     }
 
     /* ── Card ────────────────────────────────────────────────────────────── */
     .card {
       width: 100%;
-      max-width: 560px;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      max-width: 620px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
       border-radius: var(--radius);
-      padding: 32px;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
-      animation: fadeUp .5s .1s ease both;
+      padding: 36px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+      animation: fadeUp 0.6s 0.15s ease both;
     }
 
     /* ── Mode tabs ───────────────────────────────────────────────────────── */
     .mode-tabs {
       display: flex;
-      gap: 6px;
-      background: rgba(255,255,255,0.04);
-      border-radius: var(--radius-sm);
+      gap: 8px;
+      background: #f1f5f9;
+      border-radius: 8px;
       padding: 4px;
       margin-bottom: 24px;
     }
 
+    .support-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      background: var(--success-bg);
+      border: 1px solid rgba(22, 163, 74, 0.2);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      width: fit-content;
+    }
+
     .tab-btn {
       flex: 1;
-      padding: 8px 0;
+      padding: 10px 0;
       border: none;
       border-radius: 6px;
       background: transparent;
       color: var(--text-muted);
       font-family: inherit;
-      font-size: 13.5px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
-      transition: background .2s, color .2s;
+      transition: all 0.2s;
     }
 
     .tab-btn.active {
-      background: var(--accent-grad);
-      color: #fff;
-      box-shadow: 0 2px 12px var(--accent-glow);
+      background: var(--surface);
+      color: var(--accent-1);
+      box-shadow: var(--shadow-sm);
     }
 
-    .tab-btn:not(.active):hover {
-      background: var(--surface-hov);
+    .tab-btn:hover:not(.active) {
       color: var(--text);
     }
 
@@ -142,104 +166,126 @@
     .panel {
       display: none;
       flex-direction: column;
-      gap: 14px;
+      gap: 16px;
     }
     .panel.active { display: flex; }
 
     label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
       display: block;
-      margin-bottom: 6px;
-      letter-spacing: .02em;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
     }
 
     input[type="url"],
     input[type="file"] {
       width: 100%;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border);
+      background: #f8fafc;
+      border: 1.5px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text);
       font-family: inherit;
-      font-size: 14px;
-      transition: border-color .2s, box-shadow .2s;
+      font-size: 15px;
+      transition: all 0.2s;
       outline: none;
     }
 
     input[type="url"] {
-      padding: 11px 14px;
+      padding: 12px 16px;
     }
 
     input[type="url"]:focus {
       border-color: var(--accent-1);
       box-shadow: 0 0 0 3px var(--accent-glow);
+      background: var(--surface);
     }
 
-    input[type="url"]::placeholder { color: var(--text-muted); }
+    input[type="url"]::placeholder {
+      color: #cbd5e1;
+    }
 
     /* File drop zone */
     .file-zone {
       border: 2px dashed var(--border);
       border-radius: var(--radius-sm);
-      padding: 28px;
+      padding: 32px;
       text-align: center;
       cursor: pointer;
-      transition: border-color .2s, background .2s;
+      transition: all 0.2s;
       position: relative;
+      background: #f8fafc;
     }
 
     .file-zone:hover, .file-zone.drag-over {
       border-color: var(--accent-1);
-      background: rgba(124,58,237,0.06);
+      background: #eff6ff;
     }
 
     .file-zone input[type="file"] {
-      position: absolute; inset: 0;
-      opacity: 0; cursor: pointer;
-      width: 100%; height: 100%;
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
     }
 
-    .file-icon { font-size: 28px; margin-bottom: 8px; }
-    .file-zone p { color: var(--text-muted); font-size: 13.5px; }
-    .file-zone span { color: var(--accent-1); font-weight: 500; }
+    .file-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .file-zone p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .file-zone span {
+      color: var(--accent-1);
+      font-weight: 600;
+    }
+
     .file-name {
-      margin-top: 8px;
-      font-size: 13px;
+      margin-top: 12px;
+      font-size: 14px;
       color: var(--success);
-      font-weight: 500;
-      min-height: 18px;
+      font-weight: 600;
+      min-height: 20px;
     }
 
     /* ── Submit button ───────────────────────────────────────────────────── */
     #submit-btn {
       width: 100%;
-      padding: 13px;
-      margin-top: 6px;
+      padding: 14px;
+      margin-top: 8px;
       border: none;
       border-radius: var(--radius-sm);
       background: var(--accent-grad);
-      color: #fff;
+      color: #ffffff;
       font-family: inherit;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: opacity .2s, transform .15s, box-shadow .2s;
-      box-shadow: 0 4px 20px var(--accent-glow);
-      letter-spacing: .01em;
+      transition: all 0.2s;
+      box-shadow: var(--shadow);
+      letter-spacing: -0.3px;
     }
 
     #submit-btn:hover:not(:disabled) {
-      opacity: .92;
-      transform: translateY(-1px);
-      box-shadow: 0 8px 28px var(--accent-glow);
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px -10px rgba(37, 99, 235, 0.3);
     }
 
-    #submit-btn:active:not(:disabled) { transform: translateY(0); }
+    #submit-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
 
     #submit-btn:disabled {
-      opacity: .5;
+      opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
@@ -248,202 +294,439 @@
     #validation-warning {
       display: none;
       background: var(--danger-bg);
-      border: 1px solid rgba(248,113,113,0.25);
-      color: var(--danger);
+      border: 1px solid #fecaca;
+      color: #991b1b;
       border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      font-size: 13.5px;
-      margin-top: 4px;
-      animation: shake .35s ease;
+      padding: 12px 16px;
+      font-size: 14px;
+      margin-top: 8px;
+      animation: shake 0.3s ease;
     }
 
     /* ── Loading indicator ───────────────────────────────────────────────── */
     #loading-indicator {
       display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      padding: 36px 0 20px;
-      animation: fadeUp .3s ease both;
+      text-align: center;
+      padding: 32px 0;
+      animation: fadeIn 0.3s ease;
+    }
+
+    #loading-indicator.active {
+      display: block;
     }
 
     .spinner {
-      width: 44px; height: 44px;
-      border: 3px solid rgba(124,58,237,0.2);
+      width: 48px;
+      height: 48px;
+      border: 3px solid #e5e7eb;
       border-top-color: var(--accent-1);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
     }
 
     .loading-steps {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 6px;
+      gap: 8px;
     }
 
     #loading-label {
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 15px;
+      font-weight: 600;
       color: var(--text);
     }
 
     #loading-sub {
-      font-size: 12.5px;
+      font-size: 13px;
       color: var(--text-muted);
     }
 
     /* ── Error display ───────────────────────────────────────────────────── */
     #error-display {
       display: none;
-      max-width: 560px;
-      width: 100%;
-      margin-top: 20px;
       background: var(--danger-bg);
-      border: 1px solid rgba(248,113,113,0.25);
+      border: 1px solid #fecaca;
       border-radius: var(--radius);
-      padding: 16px 20px;
-      display: none;
-      align-items: flex-start;
-      gap: 12px;
-      animation: fadeUp .3s ease both;
+      padding: 20px;
+      margin-top: 24px;
+      max-width: 620px;
+      animation: slideIn 0.3s ease;
     }
 
-    .error-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
-    .error-text { font-size: 14px; color: var(--danger); line-height: 1.5; }
-    .error-text strong { display: block; font-weight: 600; margin-bottom: 2px; }
-
-    /* ── Results ─────────────────────────────────────────────────────────── */
-    #results-container {
-      display: none;
-      width: 100%;
-      max-width: 1080px;
-      margin-top: 36px;
-      animation: fadeUp .4s ease both;
-    }
-
-    .results-header {
+    #error-display.active {
       display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 20px;
+      align-items: gap: 16px;
     }
 
-    .results-header h2 {
-      font-size: 18px;
-      font-weight: 700;
-    }
-
-    .badge {
-      background: rgba(52,211,153,0.15);
-      color: var(--success);
-      border: 1px solid rgba(52,211,153,0.25);
-      border-radius: 20px;
-      padding: 2px 10px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .clips-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 20px;
-    }
-
-    .clip-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      transition: transform .2s, box-shadow .2s;
-      animation: fadeUp .4s ease both;
-    }
-
-    .clip-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 32px 72px rgba(0,0,0,0.7);
-    }
-
-    .clip-card video {
-      display: block;
-      width: 100%;
-      aspect-ratio: 16/9;
-      background: #000;
-    }
-
-    .clip-label {
-      padding: 12px 16px;
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .clip-num {
-      background: var(--accent-grad);
-      color: #fff;
-      width: 22px; height: 22px;
-      border-radius: 50%;
-      display: grid; place-items: center;
-      font-size: 11px;
-      font-weight: 700;
+    .error-icon {
+      font-size: 24px;
+      margin-right: 12px;
       flex-shrink: 0;
     }
 
-    .clip-actions {
-      padding: 0 16px 14px;
+    .error-text {
+      color: #991b1b;
+      font-size: 14px;
     }
 
-    .download-btn {
+    .error-text strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* ── Results section ─────────────────────────────────────────────────── */
+    #results-container {
+      display: none;
+      margin-top: 40px;
+      width: 100%;
+      max-width: 620px;
+      animation: fadeUp 0.5s ease;
+    }
+
+    #results-container.active {
+      display: block;
+    }
+
+    .results-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .results-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0 0 4px 0;
+    }
+
+    .results-header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    #clip-count {
+      background: var(--accent-glow);
+      color: var(--accent-1);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* ── Clips grid ──────────────────────────────────────────────────────── */
+    .clips-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 var(--radius) var(--radius);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .clip-card {
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .clip-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+
+    .clip-video {
+      width: 100%;
+      background: #000;
+      aspect-ratio: 16 / 9;
+      display: block;
+    }
+
+    .clip-info {
+      padding: 16px;
+      background: var(--surface);
+    }
+
+    .clip-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .clip-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--accent-grad);
+      color: #fff;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .clip-download {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 7px 14px;
+      padding: 8px 12px;
+      background: #f8fafc;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-muted);
-      font-family: inherit;
-      font-size: 12.5px;
-      font-weight: 500;
-      text-decoration: none;
-      background: transparent;
-      transition: border-color .2s, color .2s, background .2s;
-      cursor: pointer;
-    }
-
-    .download-btn:hover {
-      border-color: var(--accent-1);
+      border-radius: var(--radius-sm);
       color: var(--text);
-      background: rgba(124,58,237,0.08);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
     }
 
-    /* ── Animations ──────────────────────────────────────────────────────── */
-    @keyframes fadeDown  { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }
-    @keyframes fadeUp    { from { opacity: 0; transform: translateY(16px);  } to { opacity: 1; transform: none; } }
-    @keyframes spin      { to { transform: rotate(360deg); } }
-    @keyframes shake {
-      0%,100% { transform: translateX(0); }
-      20%,60% { transform: translateX(-6px); }
-      40%,80% { transform: translateX(6px); }
+    .clip-download:hover {
+      background: var(--surface-hov);
+      border-color: var(--accent-1);
+      color: var(--accent-1);
+    }
+
+    /* ── Pricing Section ────────────────────────────────────────────────── */
+    .pricing-section {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 64px;
+      margin-bottom: 48px;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .plan-card {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: var(--radius);
+      padding: 28px;
+      position: relative;
+      transition: all 0.3s ease;
+      animation: fadeUp 0.6s 0.1s ease both;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .plan-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px -10px rgba(8, 145, 178, 0.15);
+      border-color: rgba(8, 145, 178, 0.2);
+    }
+
+    .plan-card.selected {
+      border-color: var(--accent-1);
+      background: rgba(240, 253, 255, 0.8);
+      box-shadow: 0 8px 32px -8px rgba(8, 145, 178, 0.2);
+    }
+
+    .plan-card-premium {
+      border-color: rgba(8, 145, 178, 0.3);
+      background: rgba(240, 253, 255, 0.5);
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent-grad);
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .plan-header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .plan-header h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .plan-price {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .plan-price span {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--accent-1);
+      letter-spacing: -1px;
+    }
+
+    .plan-features {
+      list-style: none;
+      margin: 20px 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .plan-features li {
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .plan-select-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: rgba(8, 145, 178, 0.1);
+      color: var(--accent-1);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: -0.3px;
+      margin-top: auto;
+    }
+
+    .plan-select-btn:hover {
+      background: var(--accent-grad);
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(8, 145, 178, 0.2);
+    }
+
+    .plan-select-premium {
+      background: var(--accent-grad);
+      color: #fff;
+    }
+
+    .plan-select-premium:hover {
+      background: linear-gradient(135deg, #0e7490, #0d6178);
     }
 
     /* ── Footer ──────────────────────────────────────────────────────────── */
     footer {
-      margin-top: 60px;
+      margin-top: 48px;
       color: var(--text-muted);
-      font-size: 12.5px;
+      font-size: 13px;
       text-align: center;
     }
 
-    footer a { color: var(--accent-1); text-decoration: none; }
+    footer a {
+      color: var(--accent-1);
+      text-decoration: none;
+      font-weight: 500;
+    }
 
-    @media (max-width: 480px) {
-      body { padding: 28px 12px 60px; }
-      .card { padding: 22px 18px; }
-      .clips-grid { grid-template-columns: 1fr; }
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Animations ──────────────────────────────────────────────────────── */
+    @keyframes fadeDown {
+      from {
+        opacity: 0;
+        transform: translateY(-12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      body {
+        padding: 24px 12px 48px;
+      }
+
+      .card {
+        padding: 24px;
+      }
+
+      .logo-text {
+        font-size: 28px;
+      }
+
+      header p {
+        font-size: 14px;
+      }
+
+      .clips-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -455,7 +738,7 @@
       <div class="logo-icon">✂️</div>
       <span class="logo-text">ClipPods</span>
     </div>
-    <p>Drop a video URL or upload a file — get 3 AI-selected highlight clips in seconds.</p>
+    <p>Drop a video URL or upload a file — get 3 AI-selected highlight clips in seconds. Supports long recordings up to 2 hours.</p>
   </header>
 
   <!-- ── Main form card ─────────────────────────────────────────────────── -->
@@ -467,6 +750,7 @@
     </div>
 
     <form id="upload-form" novalidate>
+      <div class="support-bar">Supports up to 2 hours • MP4, MOV, WEBM</div>
 
       <!-- URL panel -->
       <div class="panel active" id="panel-url" role="tabpanel" aria-labelledby="tab-url">
@@ -513,6 +797,43 @@
     </div>
   </div>
 
+  <!-- ── Subscription Plans ─────────────────────────────────────────────── -->
+  <div class="pricing-section">
+    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; text-align: center; color: var(--text); letter-spacing: -0.5px;">Choose Your Plan</h2>
+    <div class="pricing-grid">
+      <!-- Basic Plan -->
+      <div class="plan-card" id="plan-basic">
+        <div class="plan-header">
+          <h3>Basic</h3>
+          <p class="plan-price">₹<span>199</span></p>
+        </div>
+        <ul class="plan-features">
+          <li>✓ Basic Heuristics AI</li>
+          <li>✓ Up to 45 minutes upload</li>
+          <li>✓ 3 clips per video</li>
+          <li>✓ MP4, MOV, WEBM support</li>
+        </ul>
+        <button class="plan-select-btn" onclick="selectPlan('basic')">Select Basic</button>
+      </div>
+
+      <!-- Premium Plan -->
+      <div class="plan-card plan-card-premium" id="plan-premium">
+        <div class="plan-badge">Most Popular</div>
+        <div class="plan-header">
+          <h3>Premium</h3>
+          <p class="plan-price">₹<span>499</span></p>
+        </div>
+        <ul class="plan-features">
+          <li>✓ Advanced AI (LLM)</li>
+          <li>✓ Up to 2 hours upload</li>
+          <li>✓ Unlimited clips</li>
+          <li>✓ Priority processing</li>
+        </ul>
+        <button class="plan-select-btn plan-select-premium" onclick="selectPlan('premium')">Select Premium</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Error display — Task 1.4 / 6.3 ────────────────────────────────── -->
   <div id="error-display" role="alert">
     <div class="error-icon">⚠️</div>
@@ -551,6 +872,37 @@
     const resultsEl     = document.getElementById('results-container');
     const clipsGrid     = document.getElementById('clips-grid');
     const clipCount     = document.getElementById('clip-count');
+
+    /* ── Plan Selection ──────────────────────────────────────────────────── */
+    let selectedPlan = 'premium'; // Default to premium
+    
+    function selectPlan(planType) {
+      selectedPlan = planType;
+      
+      // Update UI
+      document.getElementById('plan-basic').classList.toggle('selected', planType === 'basic');
+      document.getElementById('plan-premium').classList.toggle('selected', planType === 'premium');
+      
+      // Show toast notification
+      const planName = planType === 'basic' ? 'Basic (45 min)' : 'Premium (2 hours)';
+      showToast(`${planName} plan selected`);
+    }
+    
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px;
+        background: var(--accent-grad); color: white;
+        padding: 12px 20px; border-radius: 8px;
+        font-weight: 600; font-size: 14px;
+        box-shadow: 0 6px 20px rgba(8, 145, 178, 0.3);
+        animation: slideIn 0.3s ease both;
+        z-index: 1000;
+      `;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
 
     /* ── Tab switching (Task 2.4 — reset the other field) ────────────────── */
     function switchTab(mode) {
@@ -744,6 +1096,9 @@
         stopLoading();
       }
     });
+
+    /* Initialize with premium plan selected */
+    selectPlan('premium');
   </script>
 </body>
 </html>
