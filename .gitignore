@@ -1,24 +1,37 @@
 # Environment
 .env
 
+# OS Files
+.DS_Store
+**/.DS_Store
+
 # Python cache
 __pycache__/
 *.py[cod]
 *.pyo
 .venv/
 venv/
+.pytest_cache/
 
 # Temp processing files (keep the folder, ignore contents)
 temp/*
 !temp/.gitkeep
+backend/temp/*
+!backend/temp/.gitkeep
 
 # Generated output clips
 outputs/
+backend/outputs/
+*.mp4
+*.part
+*.wav
 
-# IDE
+# Render Build artifacts
+backend/bin/
+*.tar.xz
+ffmpeg-*-static/
+
+# IDE / Deploy
 .vscode/
 .idea/
-.vercel
-
-# Output clips
-*.mp4
+.vercel/
