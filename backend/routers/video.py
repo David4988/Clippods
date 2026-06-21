@@ -76,9 +76,10 @@ def _error_response(exc: HTTPException) -> JSONResponse:
 
     elif exc.status_code == 400:
         # Covers download failure, missing file, no audio track, corrupt video
-        msg = detail
+        msg = "Invalid video URL"
 
-    return JSONResponse(status_code=exc.status_code, content={"error": msg})
+    else:
+        msg = exc.detail  # 500s — pass raw detail through
 
 
 # ---------------------------------------------------------------------------
