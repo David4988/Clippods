@@ -1,0 +1,8 @@
+temp/
+backend/temp/
+*.mp4.part
+*.webm
+*.wav
+__pycache__/
+*.pyc
+.git/
