@@ -1,41 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ClipPods — AI Video Clipper</title>
-  <meta name="description" content="Paste a video URL or upload a file and get 3 highlight clips in seconds, powered by Sarvam AI." />
+  <meta name="description"
+    content="Paste a video URL or upload a file and get 3 highlight clips in seconds, powered by Sarvam AI." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
 
   <style>
     /* ── Reset & base ───────────────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:          #f8fafb;
-      --surface:     #ffffff;
-      --surface-hov: #f1f5f9;
-      --border:      #e2e8f0;
-      --accent-1:    #0891b2;
-      --accent-2:    #0e7490;
-      --accent-glow: rgba(8,145,178,0.1);
-      --accent-grad: linear-gradient(135deg, #0891b2, #0e7490);
-      --text:        #0f172a;
-      --text-muted:  #64748b;
-      --danger:      #dc2626;
-      --danger-bg:   #fee2e2;
-      --success:     #16a34a;
-      --success-bg:  #dcfce7;
-      --radius:      12px;
-      --radius-sm:   8px;
-      --shadow-sm:   0 1px 2px 0 rgba(0,0,0,0.05);
-      --shadow:      0 10px 25px -5px rgba(0,0,0,0.08);
-      --shadow-lg:   0 20px 45px -10px rgba(0,0,0,0.1);
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    html { scroll-behavior: smooth; }
+    :root {
+      --bg: #f8fafb;
+      --surface: #ffffff;
+      --surface-hov: #f1f5f9;
+      --border: #e2e8f0;
+      --accent-1: #0891b2;
+      --accent-2: #0e7490;
+      --accent-glow: rgba(8, 145, 178, 0.1);
+      --accent-grad: linear-gradient(135deg, #0891b2, #0e7490);
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --success: #16a34a;
+      --success-bg: #dcfce7;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 20px 45px -10px rgba(0, 0, 0, 0.1);
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
 
     body {
       font-family: 'Inter', system-ui, sans-serif;
@@ -168,7 +179,10 @@
       flex-direction: column;
       gap: 16px;
     }
-    .panel.active { display: flex; }
+
+    .panel.active {
+      display: flex;
+    }
 
     label {
       font-size: 14px;
@@ -218,7 +232,8 @@
       background: #f8fafc;
     }
 
-    .file-zone:hover, .file-zone.drag-over {
+    .file-zone:hover,
+    .file-zone.drag-over {
       border-color: var(--accent-1);
       background: #eff6ff;
     }
@@ -663,6 +678,7 @@
         opacity: 0;
         transform: translateY(-12px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -674,6 +690,7 @@
         opacity: 0;
         transform: translateY(12px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -681,8 +698,13 @@
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
     }
 
     @keyframes slideIn {
@@ -690,6 +712,7 @@
         opacity: 0;
         transform: translateX(-8px);
       }
+
       to {
         opacity: 1;
         transform: translateX(0);
@@ -697,13 +720,25 @@
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      25% { transform: translateX(-4px); }
-      75% { transform: translateX(4px); }
+
+      0%,
+      100% {
+        transform: translateX(0);
+      }
+
+      25% {
+        transform: translateX(-4px);
+      }
+
+      75% {
+        transform: translateX(4px);
+      }
     }
 
     /* ── Responsive ──────────────────────────────────────────────────────── */
@@ -730,6 +765,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <!-- ── Header ──────────────────────────────────────────────────────────── -->
@@ -738,15 +774,18 @@
       <div class="logo-icon">✂️</div>
       <span class="logo-text">ClipPods</span>
     </div>
-    <p>Drop a video URL or upload a file — get 3 AI-selected highlight clips in seconds. Supports long recordings up to 2 hours.</p>
+    <p>Drop a video URL or upload a file — get 3 AI-selected highlight clips in seconds. Supports long recordings up to
+      2 hours.</p>
   </header>
 
   <!-- ── Main form card ─────────────────────────────────────────────────── -->
   <div class="card">
     <!-- Mode tabs — Task 2.4: switching resets the other field -->
     <div class="mode-tabs" role="tablist" aria-label="Input mode">
-      <button class="tab-btn active" id="tab-url" role="tab" aria-selected="true"  aria-controls="panel-url"  onclick="switchTab('url')">🔗 Video URL</button>
-      <button class="tab-btn"        id="tab-file" role="tab" aria-selected="false" aria-controls="panel-file" onclick="switchTab('file')">📁 Upload File</button>
+      <button class="tab-btn active" id="tab-url" role="tab" aria-selected="true" aria-controls="panel-url"
+        onclick="switchTab('url')">🔗 Video URL</button>
+      <button class="tab-btn" id="tab-file" role="tab" aria-selected="false" aria-controls="panel-file"
+        onclick="switchTab('file')">📁 Upload File</button>
     </div>
 
     <form id="upload-form" novalidate>
@@ -756,13 +795,8 @@
       <div class="panel active" id="panel-url" role="tabpanel" aria-labelledby="tab-url">
         <div>
           <label for="video-url">Paste a YouTube or direct video URL</label>
-          <input
-            type="url"
-            id="video-url"
-            placeholder="https://youtube.com/watch?v=..."
-            autocomplete="off"
-            spellcheck="false"
-          />
+          <input type="url" id="video-url" placeholder="https://youtube.com/watch?v=..." autocomplete="off"
+            spellcheck="false" />
         </div>
       </div>
 
@@ -799,7 +833,9 @@
 
   <!-- ── Subscription Plans ─────────────────────────────────────────────── -->
   <div class="pricing-section">
-    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 24px; text-align: center; color: var(--text); letter-spacing: -0.5px;">Choose Your Plan</h2>
+    <h2
+      style="font-size: 24px; font-weight: 700; margin-bottom: 24px; text-align: center; color: var(--text); letter-spacing: -0.5px;">
+      Choose Your Plan</h2>
     <div class="pricing-grid">
       <!-- Basic Plan -->
       <div class="plan-card" id="plan-basic">
@@ -857,37 +893,37 @@
     let activeMode = 'url';   // 'url' | 'file'
 
     /* ── DOM refs ────────────────────────────────────────────────────────── */
-    const form          = document.getElementById('upload-form');
+    const form = document.getElementById('upload-form');
     const videoUrlInput = document.getElementById('video-url');
-    const videoFileInput= document.getElementById('video-file');
-    const fileZone      = document.getElementById('file-zone');
-    const fileNameDisp  = document.getElementById('file-name-display');
-    const submitBtn     = document.getElementById('submit-btn');
-    const loadingEl     = document.getElementById('loading-indicator');
-    const loadingLabel  = document.getElementById('loading-label');
-    const loadingSub    = document.getElementById('loading-sub');
-    const errorDisplay  = document.getElementById('error-display');
-    const errorMessage  = document.getElementById('error-message');
-    const validationWarn= document.getElementById('validation-warning');
-    const resultsEl     = document.getElementById('results-container');
-    const clipsGrid     = document.getElementById('clips-grid');
-    const clipCount     = document.getElementById('clip-count');
+    const videoFileInput = document.getElementById('video-file');
+    const fileZone = document.getElementById('file-zone');
+    const fileNameDisp = document.getElementById('file-name-display');
+    const submitBtn = document.getElementById('submit-btn');
+    const loadingEl = document.getElementById('loading-indicator');
+    const loadingLabel = document.getElementById('loading-label');
+    const loadingSub = document.getElementById('loading-sub');
+    const errorDisplay = document.getElementById('error-display');
+    const errorMessage = document.getElementById('error-message');
+    const validationWarn = document.getElementById('validation-warning');
+    const resultsEl = document.getElementById('results-container');
+    const clipsGrid = document.getElementById('clips-grid');
+    const clipCount = document.getElementById('clip-count');
 
     /* ── Plan Selection ──────────────────────────────────────────────────── */
     let selectedPlan = 'premium'; // Default to premium
-    
+
     function selectPlan(planType) {
       selectedPlan = planType;
-      
+
       // Update UI
       document.getElementById('plan-basic').classList.toggle('selected', planType === 'basic');
       document.getElementById('plan-premium').classList.toggle('selected', planType === 'premium');
-      
+
       // Show toast notification
       const planName = planType === 'basic' ? 'Basic (45 min)' : 'Premium (2 hours)';
       showToast(`${planName} plan selected`);
     }
-    
+
     function showToast(message) {
       const toast = document.createElement('div');
       toast.style.cssText = `
@@ -961,11 +997,11 @@
 
     /* ── Loading state ───────────────────────────────────────────────────── */
     const LOADING_STEPS = [
-      ['Downloading video…',    'Fetching from source URL'],
-      ['Extracting audio…',     'Converting to 16kHz WAV'],
-      ['Transcribing speech…',  'Powered by Sarvam AI'],
-      ['Selecting segments…',   'Finding highlight moments'],
-      ['Cutting clips…',        'Fast-seek stream copy via FFmpeg'],
+      ['Downloading video…', 'Fetching from source URL'],
+      ['Extracting audio…', 'Converting to 16kHz WAV'],
+      ['Transcribing speech…', 'Powered by Sarvam AI'],
+      ['Selecting segments…', 'Finding highlight moments'],
+      ['Cutting clips…', 'Fast-seek stream copy via FFmpeg'],
     ];
 
     let stepTimer = null;
@@ -981,7 +1017,7 @@
       const cycle = () => {
         if (i < LOADING_STEPS.length) {
           loadingLabel.textContent = LOADING_STEPS[i][0];
-          loadingSub.textContent   = LOADING_STEPS[i][1];
+          loadingSub.textContent = LOADING_STEPS[i][1];
           i++;
         }
         stepTimer = setTimeout(cycle, 5000);
@@ -1039,8 +1075,8 @@
       hideWarning();
       hideError();
 
-      const urlVal  = videoUrlInput.value.trim();
-      const hasUrl  = urlVal.length > 0;
+      const urlVal = videoUrlInput.value.trim();
+      const hasUrl = urlVal.length > 0;
       const hasFile = videoFileInput.files.length > 0;
 
       /* Task 2.2 / 2.3: exactly one must be filled */
@@ -1057,7 +1093,7 @@
 
       try {
         let response;
-        const BASE_URL = "https://api.clippods.in";
+        const BASE_URL = "https://api.theclippods.com";
 
         if (hasUrl) {
           /* Task 3: JSON body → POST /process */
@@ -1103,4 +1139,5 @@
     selectPlan('premium');
   </script>
 </body>
+
 </html>
