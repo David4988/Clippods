@@ -10,8 +10,15 @@ from fastapi import HTTPException
 # ---------------------------------------------------------------------------
 try:
     from faster_whisper import WhisperModel
+    import os
+    
+    # Try to set cache dir to /tmp if on serverless
+    os.environ["HF_HOME"] = "/tmp/huggingface"
+    
     model = WhisperModel("base", device="cpu", compute_type="int8")
-except ImportError:
+except Exception as e:
+    import logging
+    logging.warning(f"WhisperModel initialization failed: {e}. Falling back to dummy transcription.")
     model = None
 
 # ---------------------------------------------------------------------------

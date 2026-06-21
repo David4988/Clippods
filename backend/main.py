@@ -1,6 +1,12 @@
 import logging
 from pathlib import Path
 
+import os
+import sys
+
+# Add the backend directory to sys.path so imports work on Vercel
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -44,13 +50,23 @@ _OUTPUTS_DIR = Path(__file__).parent / "outputs"
 @app.get("/clips/{clip_name}", tags=["Clips"])
 async def serve_clip(clip_name: str):
     """Return the most recently written clip file matching clip_name."""
-    candidates = sorted(
-        _OUTPUTS_DIR.glob(f"*/{clip_name}"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
+    import tempfile
+    
+    search_dirs = [_OUTPUTS_DIR]
+    if os.environ.get("VERCEL"):
+        search_dirs.insert(0, Path(tempfile.gettempdir()) / "clippods_outputs")
+        search_dirs.insert(0, Path(tempfile.gettempdir()))
+
+    candidates = []
+    for d in search_dirs:
+        if d.exists():
+            candidates.extend(d.glob(f"*/{clip_name}"))
+            candidates.extend(d.glob(f"{clip_name}"))
+
     if not candidates:
         return JSONResponse(status_code=404, content={"error": f"{clip_name} not found"})
+        
+    candidates = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
     return FileResponse(str(candidates[0]), media_type="video/mp4")
 
 
@@ -68,6 +84,9 @@ async def health_check():
 # ---------------------------------------------------------------------------
 
 _STATIC_DIR = Path(__file__).parent.parent / "static"
-_STATIC_DIR.mkdir(exist_ok=True)
+try:
+    _STATIC_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
 
 app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")

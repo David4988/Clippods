@@ -84,10 +84,20 @@ def generate_clips(
             )
 
     # --- Create a unique output directory per run ---------------------------
-    # Sub-task 5.2: clips live in outputs/<run_id>/clip_N.mp4
-    outputs_dir = Path(__file__).parent.parent / "outputs"
+    import os
+    import tempfile
+    
+    if os.environ.get("VERCEL"):
+        outputs_dir = Path(tempfile.gettempdir()) / "clippods_outputs"
+    else:
+        outputs_dir = Path(__file__).parent.parent / "outputs"
+        
     run_dir = outputs_dir / uuid.uuid4().hex
-    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        run_dir = Path(tempfile.gettempdir()) / uuid.uuid4().hex
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     output_paths: list[str] = []
 
