@@ -1003,7 +1003,8 @@
 
       clips.forEach((name, i) => {
         // Backend serves clips at /clips/<name>
-        const src = `/clips/${name}`;
+        const BASE_URL = "https://api.clippods.in";
+        const src = `${BASE_URL}/clips/${name}`;
 
         const card = document.createElement('div');
         card.className = 'clip-card';
@@ -1056,10 +1057,11 @@
 
       try {
         let response;
+        const BASE_URL = "https://api.clippods.in";
 
         if (hasUrl) {
           /* Task 3: JSON body → POST /process */
-          response = await fetch('/process', {
+          response = await fetch(`${BASE_URL}/process`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ video_url: urlVal }),
@@ -1068,7 +1070,7 @@
           /* Task 4: Multipart → POST /process/upload */
           const formData = new FormData();
           formData.append('file', videoFileInput.files[0]);
-          response = await fetch('/process/upload', {
+          response = await fetch(`${BASE_URL}/process/upload`, {
             method: 'POST',
             // No Content-Type header — browser sets multipart boundary
             body: formData,
