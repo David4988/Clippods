@@ -12,8 +12,24 @@
   ],
   "routes": [
     {
+      "src": "/process(.*)",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/clips(.*)",
+      "dest": "backend/main.py"
+    },
+    {
+      "src": "/health",
+      "dest": "backend/main.py"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "backend/main.py"
+    },
+    {
+      "src": "^/$",
+      "dest": "static/index.html"
     },
     {
       "src": "/(.*)",

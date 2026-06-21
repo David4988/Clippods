@@ -19,3 +19,6 @@ outputs/
 .vscode/
 .idea/
 .vercel
+
+# Output clips
+*.mp4

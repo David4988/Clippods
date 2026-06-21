@@ -67,7 +67,7 @@ async def health_check():
 # Static UI — must be mounted LAST so it doesn't shadow API routes
 # ---------------------------------------------------------------------------
 
-_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR = Path(__file__).parent.parent / "static"
 _STATIC_DIR.mkdir(exist_ok=True)
 
 app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")
