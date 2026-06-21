@@ -6,20 +6,36 @@ from typing import TypedDict
 from fastapi import HTTPException
 
 # ---------------------------------------------------------------------------
-# Faster-Whisper model initialisation
+# Faster-Whisper model initialisation (Lazy Loaded)
 # ---------------------------------------------------------------------------
-try:
-    from faster_whisper import WhisperModel
-    import os
-    
-    # Try to set cache dir to /tmp if on serverless
-    os.environ["HF_HOME"] = "/tmp/huggingface"
-    
-    model = WhisperModel("base", device="cpu", compute_type="int8")
-except Exception as e:
-    import logging
-    logging.warning(f"WhisperModel initialization failed: {e}. Falling back to dummy transcription.")
-    model = None
+import logging
+import os
+import threading
+
+# Try to set cache dir to /tmp if on serverless
+os.environ["HF_HOME"] = "/tmp/huggingface"
+
+_model = None
+_model_init_failed = False
+_model_lock = threading.Lock()
+
+def get_model():
+    global _model, _model_init_failed
+    if _model is not None or _model_init_failed:
+        return _model
+        
+    with _model_lock:
+        if _model is not None or _model_init_failed:
+            return _model
+            
+        try:
+            from faster_whisper import WhisperModel
+            _model = WhisperModel("base", device="cpu", compute_type="int8")
+        except Exception as e:
+            logging.warning(f"WhisperModel initialization failed: {e}. Falling back to dummy transcription.")
+            _model_init_failed = True
+            
+    return _model
 
 # ---------------------------------------------------------------------------
 # Types
@@ -47,6 +63,8 @@ def transcribe(audio_path: str) -> TranscriptResult:
             status_code=400,
             detail=f"Audio file not found or empty: {audio_path}",
         )
+
+    model = get_model()
 
     if model is None:
         # Return stub data when faster-whisper is not available

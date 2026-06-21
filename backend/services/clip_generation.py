@@ -14,7 +14,7 @@ from fastapi import HTTPException
 # Constants
 # ---------------------------------------------------------------------------
 
-_CLIP_NAME_TEMPLATE = "clip_{index}.mp4"   # Sub-task 5.2: strict naming
+_CLIP_NAME_TEMPLATE = "{job_uuid}_clip_{index}.mp4"   # Sub-task 5.2: strict naming
 
 
 # ---------------------------------------------------------------------------
@@ -87,16 +87,18 @@ def generate_clips(
     import os
     import tempfile
     
+    run_uuid = uuid.uuid4().hex
+    
     if os.environ.get("VERCEL"):
         outputs_dir = Path(tempfile.gettempdir()) / "clippods_outputs"
     else:
         outputs_dir = Path(__file__).parent.parent / "outputs"
         
-    run_dir = outputs_dir / uuid.uuid4().hex
+    run_dir = outputs_dir / run_uuid
     try:
         run_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
-        run_dir = Path(tempfile.gettempdir()) / uuid.uuid4().hex
+        run_dir = Path(tempfile.gettempdir()) / run_uuid
         run_dir.mkdir(parents=True, exist_ok=True)
 
     output_paths: list[str] = []
@@ -107,8 +109,8 @@ def generate_clips(
         end      = float(seg["end"])
         duration = round(end - start, 6)
 
-        # Sub-task 5.2: strict naming → clip_0.mp4, clip_1.mp4, clip_2.mp4
-        out_path = run_dir / _CLIP_NAME_TEMPLATE.format(index=index)
+        # Sub-task 5.2: strict naming → {job_uuid}_clip_0.mp4, etc.
+        out_path = run_dir / _CLIP_NAME_TEMPLATE.format(job_uuid=run_uuid, index=index)
 
         try:
             fade_out_start = max(0, duration - 2.5)
