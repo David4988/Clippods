@@ -4,11 +4,15 @@ tests/test_integration.py — Integration tests for POST /process (JSON) and POS
 Tests the full request → response flow using FastAPI's TestClient.
 FFmpeg + Sarvam calls are mocked so no real media processing occurs.
 
+The API uses background threading: POST /process returns {"job_id": "..."}
+immediately, and GET /status/{job_id} is polled for results.
+
 Run with: python -m pytest tests/test_integration.py -v
 """
 from __future__ import annotations
 
 import io
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,6 +66,18 @@ def _stop(patches):
         p.stop()
 
 
+def _wait_for_job(job_id: str, timeout: float = 5.0) -> dict:
+    """Poll GET /status/{job_id} until status is 'completed' or 'error'."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        resp = client.get(f"/status/{job_id}")
+        body = resp.json()
+        if body.get("status") in ("completed", "error"):
+            return body
+        time.sleep(0.1)
+    raise TimeoutError(f"Job {job_id} did not complete within {timeout}s")
+
+
 # ---------------------------------------------------------------------------
 # Route contract — health + existence
 # ---------------------------------------------------------------------------
@@ -107,24 +123,27 @@ class TestRouteContract:
 
 
 # ---------------------------------------------------------------------------
-# POST /process (JSON body) — Content-Type: application/json
+# POST /process (JSON body) — returns job_id, background processes
 # ---------------------------------------------------------------------------
 
 class TestJsonRoute:
 
-    def test_returns_200_with_valid_url(self, tmp_path):
-        """Valid JSON body with video_url → 200 + correct shape."""
+    def test_returns_200_with_job_id(self, tmp_path):
+        """Valid JSON body with video_url → 200 + {job_id: ...}."""
         patches = _pipeline_patches(tmp_path)
         _apply(patches)
         try:
             resp = client.post("/process", json={"video_url": "https://example.com/v.mp4"})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert "job_id" in body
+
+            # Wait for background job to complete
+            result = _wait_for_job(body["job_id"])
+            assert result["status"] == "completed"
+            assert result["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
         finally:
             _stop(patches)
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "clips" in body
-        assert body["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
 
     def test_response_clips_are_basenames_only(self, tmp_path):
         """Absolute paths from generate_clips are stripped to basenames."""
@@ -134,15 +153,16 @@ class TestJsonRoute:
         _apply(patches)
         try:
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "completed"
+            for clip in result["clips"]:
+                assert "/" not in clip and "\\" not in clip
         finally:
             _stop(patches)
 
-        assert resp.status_code == 200
-        for clip in resp.json()["clips"]:
-            assert "/" not in clip and "\\" not in clip
-
-    def test_pipeline_error_propagates_as_error_key(self, tmp_path):
-        """A 502 from transcribe → HTTP 502 with {error: 'Audio not clear enough'}."""
+    def test_pipeline_error_stored_in_job(self, tmp_path):
+        """A failure in the pipeline → job status becomes 'error'."""
         import ffmpeg as ffmpeg_module
         from fastapi import HTTPException
 
@@ -157,12 +177,10 @@ class TestJsonRoute:
              patch("routers.video.cleanup_file"):
 
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
-
-        assert resp.status_code == 502
-        body = resp.json()
-        assert "error" in body
-        assert "detail" not in body
-        assert body["error"] == "Audio not clear enough"
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "error"
+            assert result["error"] is not None
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +190,7 @@ class TestJsonRoute:
 class TestUploadRoute:
 
     def test_returns_200_with_valid_file(self, tmp_path):
-        """Valid file upload → 200 + correct shape."""
+        """Valid file upload → 200 + job completes with clips."""
         patches = _pipeline_patches(tmp_path)
         _apply(patches)
         try:
@@ -180,12 +198,13 @@ class TestUploadRoute:
                 "/process/upload",
                 files={"file": ("clip.mp4", io.BytesIO(b"fake-video"), "video/mp4")},
             )
+            assert resp.status_code == 200
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "completed"
+            assert result["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
         finally:
             _stop(patches)
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +238,9 @@ class TestCleanup:
                    return_value=[str(tmp_path / f"clip_{i}.mp4") for i in range(3)]), \
              patch("routers.video.cleanup_file", mock_cleanup):
 
-            client.post("/process", json={"video_url": "https://x.com/v"})
+            resp = client.post("/process", json={"video_url": "https://x.com/v"})
+            job_id = resp.json()["job_id"]
+            _wait_for_job(job_id)
 
         cleaned = {str(c.args[0]) for c in mock_cleanup.call_args_list}
         assert str(video) in cleaned
@@ -246,8 +267,9 @@ class TestCleanup:
              patch("routers.video.cleanup_file", mock_cleanup):
 
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
+            job_id = resp.json()["job_id"]
+            _wait_for_job(job_id)
 
-        assert resp.status_code == 502
         cleaned = {str(c.args[0]) for c in mock_cleanup.call_args_list}
         assert str(video) in cleaned
         assert str(audio) in cleaned
@@ -260,7 +282,7 @@ class TestCleanup:
 class TestDurationGuard:
 
     def test_rejects_video_longer_than_2_hours(self, tmp_path):
-        """Video > 7200s → 400 with contract error string."""
+        """Video > 7200s → job completes with error status."""
         import ffmpeg as ffmpeg_module
 
         with patch("routers.video.get_video_input",
@@ -270,21 +292,13 @@ class TestDurationGuard:
              patch("routers.video.cleanup_file"):
 
             resp = client.post("/process", json={"video_url": "https://x.com/long.mp4"})
-
-        assert resp.status_code == 400
-        body = resp.json()
-        assert body["error"] == "Video too long (max 2 hours)"
-        assert "detail" not in body
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "error"
 
     def test_accepts_video_exactly_at_limit(self, tmp_path):
         """Video at exactly 7200s → allowed through."""
         import ffmpeg as ffmpeg_module
-        patches = _pipeline_patches(tmp_path)
-        # Override probe to return exactly 7200s
-        import ffmpeg as fm
-        for p in patches:
-            if hasattr(p, "attribute") and p.attribute == "probe":
-                p.new = MagicMock(return_value={"format": {"duration": "7200.0"}})
 
         with patch("routers.video.get_video_input",
                    new=AsyncMock(return_value=tmp_path / "video.mp4")), \
@@ -303,11 +317,12 @@ class TestDurationGuard:
              patch("routers.video.cleanup_file"):
 
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
-
-        assert resp.status_code == 200
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "completed"
 
     def test_error_key_not_detail(self, tmp_path):
-        """Rejected long video → {error: ...} never {detail: ...}."""
+        """Rejected long video → job error stored, not detail."""
         import ffmpeg as ffmpeg_module
 
         with patch("routers.video.get_video_input",
@@ -317,6 +332,7 @@ class TestDurationGuard:
              patch("routers.video.cleanup_file"):
 
             resp = client.post("/process", json={"video_url": "https://x.com/long.mp4"})
-
-        assert "error" in resp.json()
-        assert "detail" not in resp.json()
+            job_id = resp.json()["job_id"]
+            result = _wait_for_job(job_id)
+            assert result["status"] == "error"
+            assert result["error"] is not None

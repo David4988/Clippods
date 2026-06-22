@@ -183,6 +183,12 @@ def select_segments(
 
     selected.sort(key=lambda s: s["start"])
 
+    # Clamp extended ends so adjacent clips don't overlap
+    for i in range(len(selected) - 1):
+        if selected[i]["start"] != selected[i + 1]["start"] and \
+           selected[i]["end"] > selected[i + 1]["start"]:
+            selected[i]["end"] = selected[i + 1]["start"]
+
     return selected
 
 

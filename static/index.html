@@ -874,7 +874,7 @@
   <div id="error-display" role="alert">
     <div class="error-icon">⚠️</div>
     <div class="error-text">
-      <strong>Something went wrong</strong>
+      <strong>Error</strong>
       <span id="error-message"></span>
     </div>
   </div>
@@ -891,6 +891,8 @@
   <script>
     /* ── State ──────────────────────────────────────────────────────────── */
     let activeMode = 'url';   // 'url' | 'file'
+    let isProcessing = false; // guard against duplicate requests
+    let pollInterval = null;  // setInterval ID for job polling
 
     /* ── DOM refs ────────────────────────────────────────────────────────── */
     const form = document.getElementById('upload-form');
@@ -908,6 +910,16 @@
     const resultsEl = document.getElementById('results-container');
     const clipsGrid = document.getElementById('clips-grid');
     const clipCount = document.getElementById('clip-count');
+
+    /* ── Status → UI label map ──────────────────────────────────────────── */
+    const STATUS_LABELS = {
+      queued:        ['Preparing…',              'Your job is in the queue'],
+      downloading:   ['Downloading video…',      'Fetching from source URL'],
+      transcribing:  ['Transcribing audio…',     'Powered by Sarvam AI'],
+      selecting:     ['Selecting highlights…',   'Finding the best moments'],
+      clipping:      ['Generating clips…',       'Fast-seek stream copy via FFmpeg'],
+      completed:     ['Done',                    ''],
+    };
 
     /* ── Plan Selection ──────────────────────────────────────────────────── */
     let selectedPlan = 'premium'; // Default to premium
@@ -996,40 +1008,34 @@
     function hideError() { errorDisplay.style.display = 'none'; }
 
     /* ── Loading state ───────────────────────────────────────────────────── */
-    const LOADING_STEPS = [
-      ['Downloading video…', 'Fetching from source URL'],
-      ['Extracting audio…', 'Converting to 16kHz WAV'],
-      ['Transcribing speech…', 'Powered by Sarvam AI'],
-      ['Selecting segments…', 'Finding highlight moments'],
-      ['Cutting clips…', 'Fast-seek stream copy via FFmpeg'],
-    ];
-
-    let stepTimer = null;
-
-    function startLoading() {
+    function startLoading(label) {
       form.style.display = 'none';
       loadingEl.style.display = 'flex';
       hideError();
       resultsEl.style.display = 'none';
       submitBtn.disabled = true;
+      loadingLabel.textContent = label || 'Starting…';
+      loadingSub.textContent = '';
+    }
 
-      let i = 0;
-      const cycle = () => {
-        if (i < LOADING_STEPS.length) {
-          loadingLabel.textContent = LOADING_STEPS[i][0];
-          loadingSub.textContent = LOADING_STEPS[i][1];
-          i++;
-        }
-        stepTimer = setTimeout(cycle, 5000);
-      };
-      cycle();
+    function updateLoadingStatus(status) {
+      const pair = STATUS_LABELS[status];
+      if (pair) {
+        loadingLabel.textContent = pair[0];
+        loadingSub.textContent = pair[1];
+      }
     }
 
     function stopLoading() {
-      clearTimeout(stepTimer);
+      // Always clear polling interval as safety net
+      if (pollInterval !== null) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
       loadingEl.style.display = 'none';
       form.style.display = 'block';
       submitBtn.disabled = false;
+      isProcessing = false;
     }
 
     /* ── Task 5: renderClips ─────────────────────────────────────────────── */
@@ -1039,7 +1045,7 @@
 
       clips.forEach((name, i) => {
         // Backend serves clips at /clips/<name>
-        const BASE_URL = "https://api.clippods.in";
+        const BASE_URL = "https://api.theclippods.com";
         const src = `${BASE_URL}/clips/${name}`;
 
         const card = document.createElement('div');
@@ -1069,11 +1075,64 @@
       resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* ── Task 3 + 4: submit handler ──────────────────────────────────────── */
+    /* ── Polling ─────────────────────────────────────────────────────────── */
+    function startPolling(jobId) {
+      const BASE_URL = "https://api.theclippods.com";
+
+      pollInterval = setInterval(async () => {
+        try {
+          const resp = await fetch(`${BASE_URL}/status/${jobId}`);
+          const data = await resp.json();
+
+          if (!resp.ok) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            stopLoading();
+            showError(data.error || `Server error ${resp.status}`);
+            return;
+          }
+
+          const status = data.status;
+
+          // Update the loading label from real backend status
+          updateLoadingStatus(status);
+
+          if (status === 'completed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            stopLoading();
+            renderClips(data.clips);
+            return;
+          }
+
+          if (status === 'error') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            stopLoading();
+            showError(data.error || 'An unknown error occurred');
+            return;
+          }
+
+          // Otherwise keep polling (queued, downloading, transcribing, etc.)
+
+        } catch (err) {
+          // Network error during polling — stop and show error
+          clearInterval(pollInterval);
+          pollInterval = null;
+          stopLoading();
+          showError('Lost connection to server while processing.');
+        }
+      }, 5000);
+    }
+
+    /* ── Submit handler ──────────────────────────────────────────────────── */
     form.addEventListener('submit', async e => {
       e.preventDefault();
       hideWarning();
       hideError();
+
+      // Duplicate request guard
+      if (isProcessing) return;
 
       const urlVal = videoUrlInput.value.trim();
       const hasUrl = urlVal.length > 0;
@@ -1089,49 +1148,48 @@
         return;
       }
 
-      startLoading();
+      isProcessing = true;
+      startLoading('Starting…');
 
       try {
         let response;
         const BASE_URL = "https://api.theclippods.com";
 
         if (hasUrl) {
-          /* Task 3: JSON body → POST /process */
+          /* JSON body → POST /process */
           response = await fetch(`${BASE_URL}/process`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ video_url: urlVal }),
           });
         } else {
-          /* Task 4: Multipart → POST /process/upload */
+          /* Multipart → POST /process/upload */
           const formData = new FormData();
           formData.append('file', videoFileInput.files[0]);
           response = await fetch(`${BASE_URL}/process/upload`, {
             method: 'POST',
-            // No Content-Type header — browser sets multipart boundary
             body: formData,
           });
         }
 
-        /* Task 6.2: parse response */
         const data = await response.json();
 
         if (!response.ok) {
-          // Task 6.3: backend error → show {error: ...}
           throw new Error(data.error || `Server error ${response.status}`);
         }
 
-        renderClips(data.clips);
+        // Receive job_id and start polling
+        const jobId = data.job_id;
+        if (!jobId) {
+          throw new Error('No job_id received from server');
+        }
+
+        updateLoadingStatus('queued');
+        startPolling(jobId);
 
       } catch (err) {
-        /* Task 6.1: network errors + backend errors */
-        let msg = err.message;
-        if (err instanceof TypeError) {
-          msg = 'Could not reach the server. Is the backend running?';
-        }
-        showError(msg);
-      } finally {
         stopLoading();
+        showError(err.message);
       }
     });
 

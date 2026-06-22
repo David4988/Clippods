@@ -78,8 +78,8 @@ class TestGenerateClipsGuards:
 
 class TestOutputNaming:
 
-    def test_clips_named_clip_0_clip_1_clip_2(self, tmp_path):
-        """Output files are strictly named clip_0.mp4, clip_1.mp4, clip_2.mp4."""
+    def test_clips_named_with_job_uuid_prefix(self, tmp_path):
+        """Output files are named {job_uuid}_clip_{index}.mp4."""
         video = tmp_path / "source.mp4"
         video.write_bytes(b"fake video")
         segments = [_seg(0, 20), _seg(30, 50), _seg(60, 80)]
@@ -119,15 +119,15 @@ class TestOutputNaming:
                 result = generate_clips.__wrapped__(str(video), segments) \
                     if hasattr(generate_clips, "__wrapped__") else None
 
-        # Verify via template directly
+        # Verify template includes job_uuid and index placeholders
         for i in range(3):
-            assert _CLIP_NAME_TEMPLATE.format(index=i) == f"clip_{i}.mp4"
+            assert _CLIP_NAME_TEMPLATE.format(job_uuid="abc123", index=i) == f"abc123_clip_{i}.mp4"
 
     def test_clip_name_template_format(self):
-        """_CLIP_NAME_TEMPLATE produces clip_N.mp4 for any N."""
-        assert _CLIP_NAME_TEMPLATE.format(index=0) == "clip_0.mp4"
-        assert _CLIP_NAME_TEMPLATE.format(index=1) == "clip_1.mp4"
-        assert _CLIP_NAME_TEMPLATE.format(index=2) == "clip_2.mp4"
+        """_CLIP_NAME_TEMPLATE produces {job_uuid}_clip_N.mp4 for any N."""
+        assert _CLIP_NAME_TEMPLATE.format(job_uuid="test", index=0) == "test_clip_0.mp4"
+        assert _CLIP_NAME_TEMPLATE.format(job_uuid="test", index=1) == "test_clip_1.mp4"
+        assert _CLIP_NAME_TEMPLATE.format(job_uuid="test", index=2) == "test_clip_2.mp4"
 
 
 # ---------------------------------------------------------------------------
@@ -171,20 +171,23 @@ class TestFFmpegCutting:
         video.write_bytes(b"fake")
         segments = [_seg(10.5, 30.5)]
 
+        mock_input_fn = MagicMock()
         mock_stream = MagicMock()
-        mock_input = MagicMock()
+        mock_input_fn.return_value = mock_stream
         mock_stream.output.return_value = mock_stream
-        mock_input.output.return_value = mock_stream
         mock_stream.overwrite_output.return_value = mock_stream
         mock_stream.run.return_value = None  # don't produce file → 500 expected
 
-        with patch("services.clip_generation.ffmpeg.input", return_value=mock_input):
+        with patch("services.clip_generation.ffmpeg.input", mock_input_fn):
             with pytest.raises(HTTPException):
                 generate_clips(str(video), segments)
 
-        call_kwargs = mock_input.output.call_args[1]
-        assert call_kwargs.get("ss") == pytest.approx(10.5)
-        assert call_kwargs.get("t")  == pytest.approx(20.0)
+        # ss= is passed to ffmpeg.input(), not .output()
+        input_call_kwargs = mock_input_fn.call_args[1]
+        assert input_call_kwargs.get("ss") == pytest.approx(10.5)
+        # t= is passed to .output()
+        output_call_kwargs = mock_stream.output.call_args[1]
+        assert output_call_kwargs.get("t") == pytest.approx(20.0)
 
     def test_ffmpeg_uses_stream_copy(self, tmp_path):
         """Output is configured with vcodec=libx264 and acodec=aac."""
@@ -192,17 +195,18 @@ class TestFFmpegCutting:
         video.write_bytes(b"fake")
         segments = [_seg(0, 20)]
 
-        mock_input  = MagicMock()
-        mock_output = MagicMock()
-        mock_input.output.return_value = mock_output
-        mock_output.overwrite_output.return_value = mock_output
-        mock_output.run.return_value = None  # no file → 500
+        mock_input_fn = MagicMock()
+        mock_stream = MagicMock()
+        mock_input_fn.return_value = mock_stream
+        mock_stream.output.return_value = mock_stream
+        mock_stream.overwrite_output.return_value = mock_stream
+        mock_stream.run.return_value = None  # no file → 500
 
-        with patch("services.clip_generation.ffmpeg.input", return_value=mock_input):
+        with patch("services.clip_generation.ffmpeg.input", mock_input_fn):
             with pytest.raises(HTTPException):
                 generate_clips(str(video), segments)
 
-        output_call = mock_input.output.call_args
+        output_call = mock_stream.output.call_args
         assert output_call[1].get("vcodec") == "libx264"
         assert output_call[1].get("acodec") == "aac"
 
@@ -215,22 +219,23 @@ class TestFFmpegCutting:
         # Patch run to write each clip file as if FFmpeg succeeded
         out_paths: list[Path] = []
 
-        mock_input  = MagicMock()
-        mock_output = MagicMock()
-        mock_input.output.return_value = mock_output
-        mock_output.overwrite_output.return_value = mock_output
+        mock_input_fn = MagicMock()
+        mock_stream = MagicMock()
+        mock_input_fn.return_value = mock_stream
+        mock_stream.output.return_value = mock_stream
+        mock_stream.overwrite_output.return_value = mock_stream
 
         run_call = {"n": 0}
 
         def fake_run(quiet=False):
             # Pull the actual output path from the .output() call
-            out_arg = mock_input.output.call_args_list[run_call["n"]][0][0]
+            out_arg = mock_stream.output.call_args_list[run_call["n"]][0][0]
             Path(out_arg).write_bytes(b"\x00" * 64)
             run_call["n"] += 1
 
-        mock_output.run.side_effect = fake_run
+        mock_stream.run.side_effect = fake_run
 
-        with patch("services.clip_generation.ffmpeg.input", return_value=mock_input):
+        with patch("services.clip_generation.ffmpeg.input", mock_input_fn):
             result = generate_clips(str(video), segments)
 
         assert len(result) == 3
@@ -244,13 +249,14 @@ class TestFFmpegCutting:
         video.write_bytes(b"fake")
         segments = [_seg(0, 20)]
 
-        mock_input  = MagicMock()
-        mock_output = MagicMock()
-        mock_input.output.return_value = mock_output
-        mock_output.overwrite_output.return_value = mock_output
-        mock_output.run.side_effect = ffmpeg_lib.Error("run", b"", b"Muxing failed")
+        mock_input_fn = MagicMock()
+        mock_stream = MagicMock()
+        mock_input_fn.return_value = mock_stream
+        mock_stream.output.return_value = mock_stream
+        mock_stream.overwrite_output.return_value = mock_stream
+        mock_stream.run.side_effect = ffmpeg_lib.Error("run", b"", b"Muxing failed")
 
-        with patch("services.clip_generation.ffmpeg.input", return_value=mock_input):
+        with patch("services.clip_generation.ffmpeg.input", mock_input_fn):
             with pytest.raises(HTTPException) as exc_info:
                 generate_clips(str(video), segments)
 

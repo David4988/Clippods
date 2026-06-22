@@ -69,7 +69,7 @@ class TestTranscribe:
         """Faster-Whisper internal failure → HTTPException 502."""
         audio = _make_audio(tmp_path)
 
-        with patch("services.transcription.model", _make_failing_mock_model()):
+        with patch("services.transcription.get_model", return_value=_make_failing_mock_model()):
             with pytest.raises(HTTPException) as exc_info:
                 transcribe(str(audio))
 
@@ -84,7 +84,7 @@ class TestTranscribe:
             _fake_segment(1.5, 3.0, "world"),
         ]
 
-        with patch("services.transcription.model", _make_mock_model(mock_segments)):
+        with patch("services.transcription.get_model", return_value=_make_mock_model(mock_segments)):
             result = transcribe(str(audio))
 
         assert "segments" in result
@@ -105,7 +105,7 @@ class TestTranscribe:
             _fake_segment(1.0, 2.0, "valid"),
         ]
 
-        with patch("services.transcription.model", _make_mock_model(mock_segments)):
+        with patch("services.transcription.get_model", return_value=_make_mock_model(mock_segments)):
             result = transcribe(str(audio))
 
         assert len(result["segments"]) == 1
@@ -119,7 +119,7 @@ class TestTranscribe:
             _fake_segment(1, 2, "test"),
         ]
 
-        with patch("services.transcription.model", _make_mock_model(mock_segments)):
+        with patch("services.transcription.get_model", return_value=_make_mock_model(mock_segments)):
             result = transcribe(str(audio))
 
         assert isinstance(result["segments"][0]["start"], float)
