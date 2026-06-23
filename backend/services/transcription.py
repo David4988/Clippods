@@ -56,48 +56,58 @@ class TranscriptResult(TypedDict):
 # ---------------------------------------------------------------------------
 
 def transcribe(audio_path: str) -> TranscriptResult:
-    src = Path(audio_path)
+    import time
+    from utils import log_instrumentation
 
-    if not src.exists() or src.stat().st_size == 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Audio file not found or empty: {audio_path}",
-        )
-
-    model = get_model()
-
-    if model is None:
-        # Return stub data when faster-whisper is not available
-        return TranscriptResult(
-            segments=[
-                Segment(start=0.0, end=30.0, text="[Transcription unavailable - faster-whisper not installed]"),
-            ]
-        )
+    start_time = time.time()
+    log_instrumentation("transcription")
 
     try:
-        segments_generator, _info = model.transcribe(audio_path, beam_size=5)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="Audio not clear enough",
-        ) from exc
+        src = Path(audio_path)
 
-    segments: list[Segment] = []
-
-    for seg in segments_generator:
-        start = seg.start
-        end = seg.end
-        text = seg.text or ""
-
-        if start is None or end is None:
-            continue
-
-        segments.append(
-            Segment(
-                start=float(start),
-                end=float(end),
-                text=text.strip(),
+        if not src.exists() or src.stat().st_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audio file not found or empty: {audio_path}",
             )
-        )
 
-    return TranscriptResult(segments=segments)
+        model = get_model()
+
+        if model is None:
+            # Return stub data when faster-whisper is not available
+            return TranscriptResult(
+                segments=[
+                    Segment(start=0.0, end=30.0, text="[Transcription unavailable - faster-whisper not installed]"),
+                ]
+            )
+
+        try:
+            segments_generator, _info = model.transcribe(audio_path, beam_size=5)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Audio not clear enough",
+            ) from exc
+
+        segments: list[Segment] = []
+
+        for seg in segments_generator:
+            start = seg.start
+            end = seg.end
+            text = seg.text or ""
+
+            if start is None or end is None:
+                continue
+
+            segments.append(
+                Segment(
+                    start=float(start),
+                    end=float(end),
+                    text=text.strip(),
+                )
+            )
+
+        return TranscriptResult(segments=segments)
+    finally:
+        elapsed = time.time() - start_time
+        log_instrumentation("transcription", elapsed)

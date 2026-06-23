@@ -892,7 +892,8 @@
     /* ── State ──────────────────────────────────────────────────────────── */
     let activeMode = 'url';   // 'url' | 'file'
     let isProcessing = false; // guard against duplicate requests
-    let pollInterval = null;  // setInterval ID for job polling
+    let pollTimeout = null;   // setTimeout ID for job polling
+    let activeJobToken = null; // Token to identify the currently active job/polling session
 
     /* ── DOM refs ────────────────────────────────────────────────────────── */
     const form = document.getElementById('upload-form');
@@ -1027,11 +1028,12 @@
     }
 
     function stopLoading() {
-      // Always clear polling interval as safety net
-      if (pollInterval !== null) {
-        clearInterval(pollInterval);
-        pollInterval = null;
+      // Always clear polling timeout as safety net
+      if (pollTimeout !== null) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
       }
+      activeJobToken = null; // Invalidate any active job token
       loadingEl.style.display = 'none';
       form.style.display = 'block';
       submitBtn.disabled = false;
@@ -1078,15 +1080,55 @@
     /* ── Polling ─────────────────────────────────────────────────────────── */
     function startPolling(jobId) {
       const BASE_URL = "https://api.theclippods.com";
+      const MAX_CONSECUTIVE_FAILURES = 6;
+      let consecutiveFailures = 0;
 
-      pollInterval = setInterval(async () => {
+      if (pollTimeout !== null) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
+      }
+
+      // Create a unique generation token for this polling instance
+      const token = Math.random().toString(36).substring(2);
+      activeJobToken = token;
+
+      async function poll() {
+        // Guard 1: Do not start fetch if this poll generation has been invalidated
+        if (activeJobToken !== token) {
+          return;
+        }
+
         try {
           const resp = await fetch(`${BASE_URL}/status/${jobId}`);
+          
+          // Guard 2: Invalidate if token changed during the fetch network call
+          if (activeJobToken !== token) {
+            return;
+          }
+
           const data = await resp.json();
 
+          // Guard 3: Invalidate if token changed during the JSON parsing
+          if (activeJobToken !== token) {
+            return;
+          }
+
+          // ── Successful response — reset failure counter ──
+          if (consecutiveFailures > 0) {
+            console.log(`[poll] Reconnected after ${consecutiveFailures} failed attempt(s)`);
+          }
+          consecutiveFailures = 0;
+
+          // Clear any transient reconnection warning
+          loadingLabel.textContent = 'Processing your video…';
+          loadingSub.textContent = 'This may take 1–2 minutes';
+
           if (!resp.ok) {
-            clearInterval(pollInterval);
-            pollInterval = null;
+            activeJobToken = null;
+            if (pollTimeout !== null) {
+              clearTimeout(pollTimeout);
+              pollTimeout = null;
+            }
             stopLoading();
             showError(data.error || `Server error ${resp.status}`);
             return;
@@ -1098,31 +1140,62 @@
           updateLoadingStatus(status);
 
           if (status === 'completed') {
-            clearInterval(pollInterval);
-            pollInterval = null;
+            activeJobToken = null;
+            if (pollTimeout !== null) {
+              clearTimeout(pollTimeout);
+              pollTimeout = null;
+            }
             stopLoading();
             renderClips(data.clips);
             return;
           }
 
           if (status === 'error') {
-            clearInterval(pollInterval);
-            pollInterval = null;
+            activeJobToken = null;
+            if (pollTimeout !== null) {
+              clearTimeout(pollTimeout);
+              pollTimeout = null;
+            }
             stopLoading();
             showError(data.error || 'An unknown error occurred');
             return;
           }
 
-          // Otherwise keep polling (queued, downloading, transcribing, etc.)
+          // Otherwise keep polling
+          pollTimeout = setTimeout(poll, 5000);
 
         } catch (err) {
-          // Network error during polling — stop and show error
-          clearInterval(pollInterval);
-          pollInterval = null;
-          stopLoading();
-          showError('Lost connection to server while processing.');
+          // Guard 4: Invalidate if token changed before error handling
+          if (activeJobToken !== token) {
+            return;
+          }
+
+          consecutiveFailures++;
+          console.warn(`[poll] Fetch failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, err.message);
+
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            // Persistent failure — give up
+            activeJobToken = null;
+            if (pollTimeout !== null) {
+              clearTimeout(pollTimeout);
+              pollTimeout = null;
+            }
+            stopLoading();
+            showError('Lost connection to server while processing.');
+            return;
+          }
+
+          // Transient failure — keep spinner, show reconnecting message
+          loadingLabel.textContent = 'Connection interrupted. Reconnecting...';
+          loadingSub.textContent = `Attempt ${consecutiveFailures} of ${MAX_CONSECUTIVE_FAILURES}`;
+
+          // Schedule next poll even on transient failure
+          pollTimeout = setTimeout(poll, 5000);
         }
-      }, 5000);
+      }
+
+      // Start the recursive poll
+      poll();
     }
 
     /* ── Submit handler ──────────────────────────────────────────────────── */

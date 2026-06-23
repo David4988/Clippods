@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from services.audio_extraction import extract_audio
 from services.clip_generation import generate_clips
-from services.input_processing import get_video_input
+from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
 from services.transcription import transcribe
 from utils import cleanup_file
@@ -48,20 +48,22 @@ class VideoUrlRequest(BaseModel):
 
 async def _run_pipeline(
     video_url: Optional[str],
-    upload: Optional[UploadFile],
+    video_path: Optional[Path] = None,
 ) -> list[str]:
     """
     Full pipeline: Input → Audio → Transcribe → Select → Cut → Cleanup.
 
-    Returns basenames [\"clip_0.mp4\", \"clip_1.mp4\", \"clip_2.mp4\"].
+    Returns basenames ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"].
     Temp files are always cleaned up, even on failure.
     """
-    video_path: Optional[Path] = None
     audio_path: Optional[str] = None
     try:
         # Task 1: get_video_input
-        logger.info("Pipeline: resolving video input")
-        video_path = await get_video_input(video_url, upload)
+        if video_path is not None:
+            logger.info("Pipeline: using uploaded file path")
+        else:
+            logger.info("Pipeline: downloading video from URL")
+            video_path = await get_video_input(video_url, None)
 
         # Duration guard (max 2 hours)
         try:
@@ -109,7 +111,7 @@ async def process_video_url(body: VideoUrlRequest):
     def _background():
         update_job(job_id, status="queued")
         try:
-            clip_names = asyncio.run(_run_pipeline(video_url=body.video_url, upload=None))
+            clip_names = asyncio.run(_run_pipeline(video_url=body.video_url))
             update_job(job_id, status="completed", clips=clip_names)
         except Exception as exc:
             logger.exception("Background job error")
@@ -123,11 +125,15 @@ async def process_video_url(body: VideoUrlRequest):
 
 @router.post("/process/upload")
 async def process_video_upload(file: UploadFile = File(...)):
+    # Save the uploaded file NOW, while still inside the request lifecycle,
+    # so the UploadFile's SpooledTemporaryFile is still open.
+    saved_path = await save_uploaded_file(file)
+
     job_id = create_job()
     def _background():
         update_job(job_id, status="queued")
         try:
-            clip_names = asyncio.run(_run_pipeline(video_url=None, upload=file))
+            clip_names = asyncio.run(_run_pipeline(video_url=None, video_path=saved_path))
             update_job(job_id, status="completed", clips=clip_names)
         except Exception as exc:
             logger.exception("Background job error")

@@ -28,3 +28,43 @@ def cleanup_file(path: Path | str) -> None:
     p = Path(path)
     if p.exists():
         p.unlink()
+
+
+def log_instrumentation(stage: str, elapsed_time: float | None = None) -> None:
+    """
+    Log memory, virtual memory, disk space, current stage, and elapsed time.
+    """
+    import psutil
+    import shutil
+    import logging
+
+    logger = logging.getLogger("instrumentation")
+    try:
+        process = psutil.Process()
+        rss = process.memory_info().rss
+        vmem = psutil.virtual_memory()
+
+        try:
+            disk_free = shutil.disk_usage(TEMP_DIR).free
+        except Exception:
+            disk_free = shutil.disk_usage(tempfile.gettempdir()).free
+
+        elapsed_str = f"{elapsed_time:.4f}s" if elapsed_time is not None else "N/A"
+
+        vmem_dict = {
+            "total": vmem.total,
+            "available": vmem.available,
+            "percent": vmem.percent,
+            "used": vmem.used,
+            "free": vmem.free
+        }
+
+        logger.info(
+            f"[INSTRUMENTATION] Stage: '{stage}' | "
+            f"Process RSS: {rss} bytes ({rss / (1024*1024):.2f} MB) | "
+            f"Virtual Memory: {vmem_dict} | "
+            f"Temp Disk Free: {disk_free} bytes ({disk_free / (1024*1024*1024):.2f} GB) | "
+            f"Elapsed: {elapsed_str}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to log instrumentation: {e}", exc_info=True)

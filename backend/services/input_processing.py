@@ -21,27 +21,56 @@ def download_video_from_url(url: str) -> Path:
     Returns the absolute Path to the downloaded file in temp/.
     Raises HTTPException(400) on download failure.
     """
-    output_template = str(get_temp_path()) + ".%(ext)s"
+    import time
+    import threading
+    from utils import log_instrumentation
 
-    ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "outtmpl": output_template,
-        "quiet": True,
-        "no_warnings": True,
-    }
+    class MemoryLogger(threading.Thread):
+        def __init__(self, interval=10.0):
+            super().__init__()
+            self.interval = interval
+            self.stop_event = threading.Event()
+            self.daemon = True
+
+        def run(self):
+            log_instrumentation("downloading")
+            while not self.stop_event.wait(self.interval):
+                log_instrumentation("downloading")
+
+        def stop(self):
+            self.stop_event.set()
+
+    start_time = time.time()
+    mem_logger = MemoryLogger()
+    mem_logger.start()
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-    except yt_dlp.utils.DownloadError as exc:
-        raise HTTPException(status_code=400, detail=f"Video download failed: {exc}") from exc
+        output_template = str(get_temp_path()) + ".%(ext)s"
 
-    video_path = Path(filename)
-    if not video_path.exists():
-        raise HTTPException(status_code=500, detail="Downloaded file not found on disk.")
+        ydl_opts = {
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+        }
 
-    return video_path
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+        except yt_dlp.utils.DownloadError as exc:
+            raise HTTPException(status_code=400, detail=f"Video download failed: {exc}") from exc
+
+        video_path = Path(filename)
+        if not video_path.exists():
+            raise HTTPException(status_code=500, detail="Downloaded file not found on disk.")
+
+        return video_path
+    finally:
+        mem_logger.stop()
+        mem_logger.join()
+        elapsed = time.time() - start_time
+        log_instrumentation("downloading", elapsed)
 
 
 # ---------------------------------------------------------------------------
