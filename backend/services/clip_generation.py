@@ -24,6 +24,7 @@ _CLIP_NAME_TEMPLATE = "{job_uuid}_clip_{index}.mp4"   # Sub-task 5.2: strict nam
 def generate_clips(
     video_path: str,
     segments: list[dict],
+    job_id: str | None = None,
 ) -> list[str]:
     """
     Cut *video_path* into one MP4 clip per entry in *segments* using FFmpeg's
@@ -39,6 +40,8 @@ def generate_clips(
     segments : list[dict]
         Each item must have ``"start": float`` and ``"end": float`` (seconds).
         Produced by ``select_segments()``.
+    job_id : str, optional
+        ID of the active job to update progress.
 
     Returns
     -------
@@ -112,6 +115,16 @@ def generate_clips(
 
         # --- Sub-task 5.1: Batch FFmpeg fast-seek + stream-copy loop -----------
         for index, seg in enumerate(segments):
+            if job_id is not None:
+                from job_manager import update_job
+                # Map generating clips from 80% to 98%
+                progress = int(80 + (index / len(segments)) * 18)
+                update_job(
+                    job_id,
+                    status="generating_clips",
+                    progress=progress,
+                    message="Generating clips..."
+                )
             start    = float(seg["start"])
             end      = float(seg["end"])
             duration = round(end - start, 6)

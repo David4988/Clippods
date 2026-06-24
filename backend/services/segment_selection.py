@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TypedDict, Optional
 from fastapi import HTTPException
 
 # ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ MIN_START = 5.0
 class Segment(TypedDict):
     start: float
     end: float
+    score: Optional[int]
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ def _windows_overlap(a_start: float, a_end: float, b_start: float, b_end: float)
 # 🔥 SIMPLE + RELIABLE EXTENSION (no overengineering)
 def _extend_end(seg, video_duration):
     return min(seg["start"] + CLIP_DURATION + BUFFER, video_duration)
+
 
 def _align_end(ws, default_end, segments, video_duration):
     search_limit = min(default_end + 2.0, video_duration)
@@ -141,12 +143,14 @@ def select_segments(
 
     selected: list[Segment] = []
 
-    for (ws, we), _ in ranked:
+    for (ws, we), score in ranked:
         if len(selected) >= NUM_CLIPS:
             break
         if any(_windows_overlap(ws, we, s["start"], s["end"]) for s in selected):
             continue
-        selected.append(Segment(start=ws, end=we))
+        # Map raw word density score to a viral score between 75% and 98%
+        viral_score = int(75 + min(score * 4, 23))
+        selected.append(Segment(start=ws, end=we, score=viral_score))
 
     # --- Fallback ---
     if len(selected) < NUM_CLIPS:
@@ -155,6 +159,7 @@ def select_segments(
                 break
             if any(_windows_overlap(seg["start"], seg["end"], s["start"], s["end"]) for s in selected):
                 continue
+            seg["score"] = 82 - len(selected)
             selected.append(seg)
 
     # --- Force exactly 3 ---
@@ -162,7 +167,7 @@ def select_segments(
         selected = _uniform_fallback(video_duration)
 
     while len(selected) < NUM_CLIPS:
-        selected.append(selected[-1])
+        selected.append(dict(selected[-1]))
 
     selected = selected[:NUM_CLIPS]
 
@@ -198,7 +203,7 @@ def select_segments(
 
 def _uniform_fallback(video_duration: float) -> list[Segment]:
     if video_duration <= CLIP_DURATION:
-        base = Segment(start=0.0, end=video_duration)
+        base = Segment(start=0.0, end=video_duration, score=80)
         return [base, base, base]
 
     zone = video_duration / NUM_CLIPS
@@ -208,6 +213,6 @@ def _uniform_fallback(video_duration: float) -> list[Segment]:
         mid = zone * i + zone / 2
         ws = max(0.0, mid - CLIP_DURATION / 2)
         ws, we = _clamp_window(ws, video_duration)
-        segments.append(Segment(start=ws, end=we))
+        segments.append(Segment(start=ws, end=we, score=85 - i))
 
     return segments

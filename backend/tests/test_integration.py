@@ -141,7 +141,11 @@ class TestJsonRoute:
             # Wait for background job to complete
             result = _wait_for_job(body["job_id"])
             assert result["status"] == "completed"
-            assert result["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
+            assert result["clips"] == [
+                {"filename": "clip_0.mp4", "score": 85, "title": "Clip 1", "duration": 20.0},
+                {"filename": "clip_1.mp4", "score": 85, "title": "Clip 2", "duration": 20.0},
+                {"filename": "clip_2.mp4", "score": 85, "title": "Clip 3", "duration": 20.0}
+            ]
         finally:
             _stop(patches)
 
@@ -156,7 +160,8 @@ class TestJsonRoute:
             job_id = resp.json()["job_id"]
             result = _wait_for_job(job_id)
             assert result["status"] == "completed"
-            for clip in result["clips"]:
+            for clip_obj in result["clips"]:
+                clip = clip_obj["filename"]
                 assert "/" not in clip and "\\" not in clip
         finally:
             _stop(patches)
@@ -202,7 +207,11 @@ class TestUploadRoute:
             job_id = resp.json()["job_id"]
             result = _wait_for_job(job_id)
             assert result["status"] == "completed"
-            assert result["clips"] == ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"]
+            assert result["clips"] == [
+                {"filename": "clip_0.mp4", "score": 85, "title": "Clip 1", "duration": 20.0},
+                {"filename": "clip_1.mp4", "score": 85, "title": "Clip 2", "duration": 20.0},
+                {"filename": "clip_2.mp4", "score": 85, "title": "Clip 3", "duration": 20.0}
+            ]
         finally:
             _stop(patches)
 

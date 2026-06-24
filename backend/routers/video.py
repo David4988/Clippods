@@ -49,6 +49,7 @@ class VideoUrlRequest(BaseModel):
 async def _run_pipeline(
     video_url: Optional[str],
     video_path: Optional[Path] = None,
+    job_id: Optional[str] = None,
 ) -> list[str]:
     """
     Full pipeline: Input → Audio → Transcribe → Select → Cut → Cleanup.
@@ -63,7 +64,9 @@ async def _run_pipeline(
             logger.info("Pipeline: using uploaded file path")
         else:
             logger.info("Pipeline: downloading video from URL")
-            video_path = await get_video_input(video_url, None)
+            if job_id is not None:
+                update_job(job_id, status="downloading", progress=5, message="Downloading video...")
+            video_path = await get_video_input(video_url, None, job_id=job_id)
 
         # Duration guard (max 2 hours)
         try:
@@ -78,21 +81,40 @@ async def _run_pipeline(
 
         # Task 2: extract_audio
         logger.info("Pipeline: extracting audio from %s", video_path)
+        if job_id is not None:
+            update_job(job_id, status="extracting_audio", progress=40, message="Extracting audio...")
         audio_path = await asyncio.to_thread(extract_audio, str(video_path))
 
         # Task 3: transcribe
         logger.info("Pipeline: transcribing audio")
+        if job_id is not None:
+            update_job(job_id, status="transcribing", progress=60, message="Transcribing audio...")
         transcript = await asyncio.to_thread(transcribe, audio_path)
         segments = transcript["segments"]
 
         # Task 4: select_segments
         logger.info("Pipeline: selecting segments (video_duration=%.2fs)", video_duration)
+        if job_id is not None:
+            update_job(job_id, status="selecting_segments", progress=75, message="Selecting highlights...")
         selected = select_segments(segments, video_duration)
 
         # Task 5: generate_clips
         logger.info("Pipeline: generating %d clips", len(selected))
-        clip_paths = await asyncio.to_thread(generate_clips, str(video_path), selected)
-        return [Path(p).name for p in clip_paths]
+        if job_id is not None:
+            update_job(job_id, status="generating_clips", progress=80, message="Generating clips...")
+        clip_paths = await asyncio.to_thread(generate_clips, str(video_path), selected, job_id)
+        
+        # Build rich metadata clip list
+        rich_clips = []
+        for i, path_str in enumerate(clip_paths):
+            seg = selected[i]
+            rich_clips.append({
+                "filename": Path(path_str).name,
+                "score": seg.get("score", 85),
+                "title": f"Clip {i + 1}",
+                "duration": round(seg["end"] - seg["start"], 1)
+            })
+        return rich_clips
     finally:
         if video_path is not None:
             cleanup_file(video_path)
@@ -109,10 +131,10 @@ async def _run_pipeline(
 async def process_video_url(body: VideoUrlRequest):
     job_id = create_job()
     def _background():
-        update_job(job_id, status="queued")
+        update_job(job_id, status="queued", progress=5, message="Queued")
         try:
-            clip_names = asyncio.run(_run_pipeline(video_url=body.video_url))
-            update_job(job_id, status="completed", clips=clip_names)
+            clip_names = asyncio.run(_run_pipeline(video_url=body.video_url, job_id=job_id))
+            update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
             logger.exception("Background job error")
             update_job(job_id, status="error", error=str(exc))
@@ -131,10 +153,10 @@ async def process_video_upload(file: UploadFile = File(...)):
 
     job_id = create_job()
     def _background():
-        update_job(job_id, status="queued")
+        update_job(job_id, status="queued", progress=5, message="Queued")
         try:
-            clip_names = asyncio.run(_run_pipeline(video_url=None, video_path=saved_path))
-            update_job(job_id, status="completed", clips=clip_names)
+            clip_names = asyncio.run(_run_pipeline(video_url=None, video_path=saved_path, job_id=job_id))
+            update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
             logger.exception("Background job error")
             update_job(job_id, status="error", error=str(exc))

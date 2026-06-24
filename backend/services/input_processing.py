@@ -14,7 +14,35 @@ from utils import get_temp_path
 # Sub-task 1.1: URL Handler
 # ---------------------------------------------------------------------------
 
-def download_video_from_url(url: str) -> Path:
+def format_speed(speed_bytes_sec) -> str | None:
+    if speed_bytes_sec is None:
+        return None
+    try:
+        speed_float = float(speed_bytes_sec)
+        if speed_float >= 1024 * 1024:
+            return f"{speed_float / (1024 * 1024):.1f} MB/s"
+        elif speed_float >= 1024:
+            return f"{speed_float / 1024:.1f} KB/s"
+        else:
+            return f"{speed_float:.1f} B/s"
+    except (ValueError, TypeError):
+        return None
+
+def format_eta(eta_seconds) -> str | None:
+    if eta_seconds is None:
+        return None
+    try:
+        eta_int = int(eta_seconds)
+        if eta_int >= 60:
+            mins = eta_int // 60
+            secs = eta_int % 60
+            return f"{mins}m {secs}s"
+        else:
+            return f"{eta_int}s"
+    except (ValueError, TypeError):
+        return None
+
+def download_video_from_url(url: str, job_id: str | None = None) -> Path:
     """
     Download the best-quality video from *url* using yt-dlp.
 
@@ -53,6 +81,38 @@ def download_video_from_url(url: str) -> Path:
             "quiet": True,
             "no_warnings": True,
         }
+
+        if job_id is not None:
+            from job_manager import update_job
+            def progress_hook(d):
+                if d.get("status") == "downloading":
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                    downloaded = d.get("downloaded_bytes") or 0
+                    ratio = downloaded / total if total > 0 else 0.0
+                    progress = int(5 + (ratio * 30))
+                    progress = max(5, min(35, progress))
+                    
+                    speed = format_speed(d.get("speed"))
+                    eta = format_eta(d.get("eta"))
+                    
+                    update_job(
+                        job_id,
+                        status="downloading",
+                        progress=progress,
+                        message="Downloading video...",
+                        speed=speed,
+                        eta=eta
+                    )
+                elif d.get("status") == "finished":
+                    update_job(
+                        job_id,
+                        status="downloading",
+                        progress=35,
+                        message="Downloading video...",
+                        speed=None,
+                        eta=None
+                    )
+            ydl_opts["progress_hooks"] = [progress_hook]
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -102,6 +162,7 @@ async def save_uploaded_file(upload: UploadFile) -> Path:
 async def get_video_input(
     video_url: str | None,
     upload: UploadFile | None,
+    job_id: str | None = None,
 ) -> Path:
     """
     Unified entry point for Task 1.
@@ -128,5 +189,8 @@ async def get_video_input(
         )
 
     if has_url:
-        return download_video_from_url(video_url.strip())  # type: ignore[arg-type]
+        if job_id is not None:
+            return download_video_from_url(video_url.strip(), job_id)
+        else:
+            return download_video_from_url(video_url.strip())
     return await save_uploaded_file(upload)  # type: ignore[arg-type]
