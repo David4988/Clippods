@@ -133,7 +133,7 @@ def generate_clips(
             out_path = run_dir / _CLIP_NAME_TEMPLATE.format(job_uuid=run_uuid, index=index)
 
             try:
-                fade_out_start = max(0, duration - 2.5)
+                fade_out_start = max(0, duration - 0.05)
 
                 (
                     ffmpeg
@@ -145,8 +145,7 @@ def generate_clips(
                         acodec="aac",
                         preset="fast",
                         movflags="faststart",
-                        af=f"volume=0.9,afade=t=in:st=0:d=1.5,afade=t=out:st={fade_out_start}:d=2.5",
-                        vf=f"fade=t=in:st=0:d=1,fade=t=out:st={fade_out_start}:d=2"
+                        af=f"volume=0.9,afade=t=in:st=0:d=0.05,afade=t=out:st={fade_out_start}:d=0.05"
                     )
                     .overwrite_output()
                     .run(quiet=True)

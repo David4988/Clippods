@@ -8,7 +8,8 @@ from fastapi import HTTPException
 
 from services.segment_selection import (
     BUFFER,
-    CLIP_DURATION,
+    MIN_DURATION,
+    PREF_MAX_DURATION,
     MAX_DURATION,
     MIN_START,
     NUM_CLIPS,
@@ -46,18 +47,18 @@ class TestWordDensity:
 class TestClampWindow:
     def test_normal_case(self):
         ws, we = _clamp_window(10.0, 120.0)
-        assert we - ws == pytest.approx(CLIP_DURATION)
+        assert we - ws == pytest.approx(PREF_MAX_DURATION)
 
     def test_overflow_shifts_left(self):
         ws, we = _clamp_window(110.0, 120.0)
         assert we == pytest.approx(120.0)
-        assert ws == pytest.approx(100.0)
-        assert we - ws == pytest.approx(CLIP_DURATION)
+        assert ws == pytest.approx(100.0 + (20.0 - PREF_MAX_DURATION))
+        assert we - ws == pytest.approx(PREF_MAX_DURATION)
 
     def test_start_zero(self):
         ws, we = _clamp_window(0.0, 60.0)
         assert ws == 0.0
-        assert we == pytest.approx(CLIP_DURATION)
+        assert we == pytest.approx(PREF_MAX_DURATION)
 
 
 class TestWindowsOverlap:
@@ -125,7 +126,7 @@ class TestSelectSegments:
     def test_prefers_high_density_region(self):
         """Dense cluster near start should be selected first."""
         # 15 segments of 1s each clustered at MIN_START, giving 15s of speech
-        # which passes the 0.6*CLIP_DURATION=12s energy filter
+        # which passes the 0.6*(we-ws) energy filter
         dense = [_seg(MIN_START + i, MIN_START + i + 1, "word " * 20) for i in range(15)]
         # Sparse region in the middle
         sparse = [_seg(80, 85, "a")]
@@ -143,13 +144,13 @@ class TestSelectSegments:
 class TestTimingValidation:
 
     def test_clip_duration_within_bounds(self):
-        """Every selected segment must be between CLIP_DURATION and MAX_DURATION wide."""
+        """Every selected segment must be between MIN_DURATION and MAX_DURATION + BUFFER wide."""
         ts = [_seg(i * 8, i * 8 + 7) for i in range(15)]
         result = select_segments(ts, 180.0)
         for seg in result:
             width = round(seg["end"] - seg["start"], 6)
-            assert CLIP_DURATION - 0.01 <= width <= MAX_DURATION + 0.01, \
-                f"Segment width {width} not in [{CLIP_DURATION}, {MAX_DURATION}]: {seg}"
+            assert MIN_DURATION - 0.01 <= width <= MAX_DURATION + BUFFER + 0.01, \
+                f"Segment width {width} not in [{MIN_DURATION}, {MAX_DURATION + BUFFER}]: {seg}"
 
     def test_segments_within_video_bounds(self):
         """No segment should exceed video_duration."""
@@ -174,8 +175,8 @@ class TestTimingValidation:
         assert len(result) == NUM_CLIPS
         for seg in result:
             width = round(seg["end"] - seg["start"], 6)
-            assert CLIP_DURATION - 0.01 <= width <= MAX_DURATION + 0.01, \
-                f"Fallback width {width} not in [{CLIP_DURATION}, {MAX_DURATION}]: {seg}"
+            assert PREF_MAX_DURATION - 0.01 <= width <= MAX_DURATION + BUFFER + 0.01, \
+                f"Fallback width {width} not in [{PREF_MAX_DURATION}, {MAX_DURATION + BUFFER}]: {seg}"
 
     def test_malformed_timestamps_are_ignored(self):
         """Segments missing start/end don't crash the function."""

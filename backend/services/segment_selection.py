@@ -7,10 +7,13 @@ from fastapi import HTTPException
 # Constants
 # ---------------------------------------------------------------------------
 
-CLIP_DURATION = 20.0
+MIN_DURATION = 8.0
+PREF_MIN_DURATION = 12.0
+PREF_MAX_DURATION = 15.0
+MAX_DURATION = 20.0
+PAUSE_THRESHOLD = 0.8
 NUM_CLIPS = 3
 BUFFER = 3.0  # 🔥 small extension to avoid abrupt cuts
-MAX_DURATION = 25.0
 MIN_START = 5.0
 
 # ---------------------------------------------------------------------------
@@ -34,10 +37,10 @@ def _word_density(text: str, duration: float) -> float:
 
 
 def _clamp_window(start: float, video_duration: float) -> tuple[float, float]:
-    end = start + CLIP_DURATION
+    end = start + PREF_MAX_DURATION
     if end > video_duration:
         end = video_duration
-        start = max(0.0, end - CLIP_DURATION)
+        start = max(0.0, end - PREF_MAX_DURATION)
     return round(start, 3), round(end, 3)
 
 
@@ -47,7 +50,7 @@ def _windows_overlap(a_start: float, a_end: float, b_start: float, b_end: float)
 
 # 🔥 SIMPLE + RELIABLE EXTENSION (no overengineering)
 def _extend_end(seg, video_duration):
-    return min(seg["start"] + CLIP_DURATION + BUFFER, video_duration)
+    return min(seg["start"] + PREF_MAX_DURATION + BUFFER, video_duration)
 
 
 def _align_end(ws, default_end, segments, video_duration):
@@ -70,6 +73,33 @@ def _align_end(ws, default_end, segments, video_duration):
             best_end = seg_end
 
     return best_end
+
+def _score_stopping_point(seg: dict, next_seg: Optional[dict], duration: float) -> int:
+    score = 0
+    text = seg.get("text", "").strip()
+    
+    # +2 sentence completion / punctuation
+    if text.endswith((".", "!", "?")):
+        score += 2
+        
+    if next_seg:
+        # +2 pause above threshold
+        pause = next_seg["start"] - seg["end"]
+        if pause >= PAUSE_THRESHOLD:
+            score += 2
+            
+        # +2 speaker change
+        if seg.get("speaker") and next_seg.get("speaker") and seg["speaker"] != next_seg["speaker"]:
+            score += 2
+
+    # +1 duration >= preferred duration
+    if duration >= PREF_MIN_DURATION:
+        score += 1
+        
+    # +1 transcript segment boundary
+    score += 1
+    
+    return score
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -99,25 +129,54 @@ def select_segments(
 
     t = MIN_START
 
-    while t + CLIP_DURATION <= video_duration:
+    while t + MIN_DURATION <= video_duration:
         ws = t
-        we = t + CLIP_DURATION
+        
+        current_speech_count = 0
+        current_total_speech_duration = 0.0
+        current_word_density_score = 0.0
+        
+        best_end = None
+        best_stop_score = -1
+        best_speech_count = 0
+        best_speech_duration = 0.0
+        best_word_density_score = 0.0
 
-        speech_count = 0
-        score = 0.0
-        total_speech_duration = 0.0
-
-        for seg in valid_ts:
+        for i, seg in enumerate(valid_ts):
             mid = (seg["start"] + seg["end"]) / 2.0
 
-            if ws <= mid < we:
+            if mid >= ws and mid <= ws + MAX_DURATION:
                 duration = seg["end"] - seg["start"]
                 text = seg.get("text", "").strip()
 
                 if text:
-                    speech_count += 1
-                    total_speech_duration += duration
-                    score += _word_density(text, duration)
+                    current_speech_count += 1
+                    current_total_speech_duration += duration
+                    current_word_density_score += _word_density(text, duration)
+                    
+                clip_duration = seg["end"] - ws
+                
+                if clip_duration >= MIN_DURATION and clip_duration <= MAX_DURATION:
+                    next_seg = valid_ts[i + 1] if i + 1 < len(valid_ts) else None
+                    stop_score = _score_stopping_point(seg, next_seg, clip_duration)
+                    
+                    if stop_score > best_stop_score:
+                        best_stop_score = stop_score
+                        best_end = seg["end"]
+                        best_speech_count = current_speech_count
+                        best_speech_duration = current_total_speech_duration
+                        best_word_density_score = current_word_density_score
+            elif mid > ws + MAX_DURATION:
+                break
+                
+        if best_end is None:
+            t += STEP
+            continue
+            
+        we = best_end
+        speech_count = best_speech_count
+        total_speech_duration = best_speech_duration
+        score = best_word_density_score
 
         # ❌ skip empty or weak windows
         if speech_count == 0:
@@ -125,7 +184,8 @@ def select_segments(
             continue
 
         # 🔥 ENERGY FILTER (this fixes your low-energy issue)
-        if total_speech_duration < 0.6 * CLIP_DURATION:
+        clip_duration = we - ws
+        if total_speech_duration < 0.6 * clip_duration:
             t += STEP
             continue
 
@@ -174,7 +234,7 @@ def select_segments(
     # 🔥 APPLY CLEAN EXTENSION
     for seg in selected:
         default_end = min(
-            seg["start"] + CLIP_DURATION + BUFFER,
+            seg["start"] + PREF_MAX_DURATION + BUFFER,
             seg["start"] + MAX_DURATION,
             video_duration
         )
@@ -202,7 +262,7 @@ def select_segments(
 # ---------------------------------------------------------------------------
 
 def _uniform_fallback(video_duration: float) -> list[Segment]:
-    if video_duration <= CLIP_DURATION:
+    if video_duration <= PREF_MAX_DURATION:
         base = Segment(start=0.0, end=video_duration, score=80)
         return [base, base, base]
 
@@ -211,7 +271,7 @@ def _uniform_fallback(video_duration: float) -> list[Segment]:
 
     for i in range(NUM_CLIPS):
         mid = zone * i + zone / 2
-        ws = max(0.0, mid - CLIP_DURATION / 2)
+        ws = max(0.0, mid - PREF_MAX_DURATION / 2)
         ws, we = _clamp_window(ws, video_duration)
         segments.append(Segment(start=ws, end=we, score=85 - i))
 
