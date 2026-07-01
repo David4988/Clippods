@@ -12,7 +12,7 @@ PREF_MIN_DURATION = 12.0
 PREF_MAX_DURATION = 15.0
 MAX_DURATION = 20.0
 PAUSE_THRESHOLD = 0.8
-NUM_CLIPS = 3
+DEFAULT_NUM_CLIPS = 3
 BUFFER = 3.0  # 🔥 small extension to avoid abrupt cuts
 MIN_START = 5.0
 
@@ -107,6 +107,7 @@ def _score_stopping_point(seg: dict, next_seg: Optional[dict], duration: float) 
 def select_segments(
     timestamps: list[dict],
     video_duration: float,
+    max_clips: int = DEFAULT_NUM_CLIPS,
 ) -> list[Segment]:
 
     if not isinstance(video_duration, (int, float)) or video_duration <= 0:
@@ -204,7 +205,7 @@ def select_segments(
     selected: list[Segment] = []
 
     for (ws, we), score in ranked:
-        if len(selected) >= NUM_CLIPS:
+        if len(selected) >= max_clips:
             break
         if any(_windows_overlap(ws, we, s["start"], s["end"]) for s in selected):
             continue
@@ -213,23 +214,23 @@ def select_segments(
         selected.append(Segment(start=ws, end=we, score=viral_score))
 
     # --- Fallback ---
-    if len(selected) < NUM_CLIPS:
-        for seg in _uniform_fallback(video_duration):
-            if len(selected) >= NUM_CLIPS:
+    if len(selected) < max_clips:
+        for seg in _uniform_fallback(video_duration, max_clips):
+            if len(selected) >= max_clips:
                 break
             if any(_windows_overlap(seg["start"], seg["end"], s["start"], s["end"]) for s in selected):
                 continue
             seg["score"] = 82 - len(selected)
             selected.append(seg)
 
-    # --- Force exactly 3 ---
+    # Ensure we have at least max_clips clips
     if not selected:
-        selected = _uniform_fallback(video_duration)
+        selected = _uniform_fallback(video_duration, max_clips)
 
-    while len(selected) < NUM_CLIPS:
+    while len(selected) < max_clips:
         selected.append(dict(selected[-1]))
 
-    selected = selected[:NUM_CLIPS]
+    selected = selected[:max_clips]
 
     # 🔥 APPLY CLEAN EXTENSION
     for seg in selected:
@@ -261,15 +262,15 @@ def select_segments(
 # Fallback
 # ---------------------------------------------------------------------------
 
-def _uniform_fallback(video_duration: float) -> list[Segment]:
+def _uniform_fallback(video_duration: float, max_clips: int) -> list[Segment]:
     if video_duration <= PREF_MAX_DURATION:
         base = Segment(start=0.0, end=video_duration, score=80)
-        return [base, base, base]
+        return [base] * max_clips
 
-    zone = video_duration / NUM_CLIPS
+    zone = video_duration / max_clips
     segments = []
 
-    for i in range(NUM_CLIPS):
+    for i in range(max_clips):
         mid = zone * i + zone / 2
         ws = max(0.0, mid - PREF_MAX_DURATION / 2)
         ws, we = _clamp_window(ws, video_duration)
