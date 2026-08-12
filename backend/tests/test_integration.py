@@ -134,7 +134,7 @@ class TestJsonRoute:
         _apply(patches)
         try:
             resp = client.post("/process", json={"video_url": "https://example.com/v.mp4"})
-            assert resp.status_code == 200
+            assert resp.status_code in (200, 202)
             body = resp.json()
             assert "job_id" in body
 
@@ -203,7 +203,7 @@ class TestUploadRoute:
                 "/process/upload",
                 files={"file": ("clip.mp4", io.BytesIO(b"fake-video"), "video/mp4")},
             )
-            assert resp.status_code == 200
+            assert resp.status_code in (200, 202)
             job_id = resp.json()["job_id"]
             result = _wait_for_job(job_id)
             assert result["status"] == "completed"

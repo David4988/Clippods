@@ -12,7 +12,7 @@ from services.segment_selection import (
     PREF_MAX_DURATION,
     MAX_DURATION,
     MIN_START,
-    NUM_CLIPS,
+    DEFAULT_NUM_CLIPS,
     _clamp_window,
     _uniform_fallback,
     _windows_overlap,
@@ -91,12 +91,12 @@ class TestSelectSegments:
     def test_always_returns_num_clips(self):
         ts = [_seg(i * 5, i * 5 + 4) for i in range(20)]
         result = select_segments(ts, 120.0)
-        assert len(result) == NUM_CLIPS
+        assert len(result) == DEFAULT_NUM_CLIPS
 
     def test_returns_three_for_long_video(self):
         ts = [_seg(i * 10, i * 10 + 8) for i in range(12)]
         result = select_segments(ts, 120.0)
-        assert len(result) == NUM_CLIPS
+        assert len(result) == DEFAULT_NUM_CLIPS
 
     def test_segments_are_non_overlapping(self):
         ts = [_seg(i * 5, i * 5 + 4) for i in range(30)]
@@ -163,7 +163,7 @@ class TestTimingValidation:
 
     def test_short_video_returns_three_clips(self):
         result = select_segments([], 15.0)
-        assert len(result) == NUM_CLIPS
+        assert len(result) == DEFAULT_NUM_CLIPS
 
         for seg in result:
             assert seg["start"] == 0.0
@@ -172,7 +172,7 @@ class TestTimingValidation:
     def test_no_timestamps_uses_uniform_fallback(self):
         """Empty timestamps → uniform 3-window distribution."""
         result = select_segments([], 120.0)
-        assert len(result) == NUM_CLIPS
+        assert len(result) == DEFAULT_NUM_CLIPS
         for seg in result:
             width = round(seg["end"] - seg["start"], 6)
             assert PREF_MAX_DURATION - 0.01 <= width <= MAX_DURATION + BUFFER + 0.01, \

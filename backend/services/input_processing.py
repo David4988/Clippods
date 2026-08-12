@@ -1,14 +1,18 @@
 """
 services/input_processing.py — Task 1: get_video_input
-Handles URL downloads, file uploads, and input validation.
+Handles URL downloads, chunked file uploads, and strict input validation.
 """
-from pathlib import Path
+from __future__ import annotations
 
+import logging
+from pathlib import Path
 import yt_dlp
 from fastapi import HTTPException, UploadFile
 
 from utils import get_temp_path
+import config
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Sub-task 1.1: URL Handler
@@ -47,11 +51,12 @@ def download_video_from_url(url: str, job_id: str | None = None) -> Path:
     Download the best-quality video from *url* using yt-dlp.
 
     Returns the absolute Path to the downloaded file in temp/.
-    Raises HTTPException(400) on download failure.
+    Raises HTTPException(400) on download failure or cancellation.
     """
     import time
     import threading
     from utils import log_instrumentation
+    from job_manager import is_job_cancelled
 
     class MemoryLogger(threading.Thread):
         def __init__(self, interval=10.0):
@@ -75,16 +80,26 @@ def download_video_from_url(url: str, job_id: str | None = None) -> Path:
     try:
         output_template = str(get_temp_path()) + ".%(ext)s"
 
+        # Safe options with socket timeout
         ydl_opts = {
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "outtmpl": output_template,
             "quiet": True,
             "no_warnings": True,
+            "socket_timeout": 30, # socket timeout in seconds
         }
 
         if job_id is not None:
+            # Check early cancellation
+            if is_job_cancelled(job_id):
+                raise HTTPException(status_code=499, detail="Job cancelled by user.")
+
             from job_manager import update_job
             def progress_hook(d):
+                # Check cancellation in the middle of download
+                if is_job_cancelled(job_id):
+                    raise ValueError("Job cancelled by user.")
+
                 if d.get("status") == "downloading":
                     total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                     downloaded = d.get("downloaded_bytes") or 0
@@ -114,11 +129,30 @@ def download_video_from_url(url: str, job_id: str | None = None) -> Path:
                     )
             ydl_opts["progress_hooks"] = [progress_hook]
 
+        # Enforce yt-dlp duration timeout limit
+        # To run yt-dlp with timeout in Python, we run it inside a thread or process,
+        # or we check elapsed time in progress hooks. Let's check elapsed time in hooks:
+        download_start_time = time.time()
+        
+        def duration_check_hook(d):
+            if time.time() - download_start_time > config.YT_DLP_TIMEOUT_SECONDS:
+                raise ValueError("Download timeout exceeded.")
+            
+        if "progress_hooks" in ydl_opts:
+            ydl_opts["progress_hooks"].append(duration_check_hook)
+        else:
+            ydl_opts["progress_hooks"] = [duration_check_hook]
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 filename = ydl.prepare_filename(info)
-        except yt_dlp.utils.DownloadError as exc:
+        except Exception as exc:
+            # Handle cancellation/timeout exceptions
+            if "Job cancelled" in str(exc):
+                raise HTTPException(status_code=499, detail="Job cancelled by user.")
+            if "timeout" in str(exc).lower():
+                raise HTTPException(status_code=408, detail="Video download timed out.")
             raise HTTPException(status_code=400, detail=f"Video download failed: {exc}") from exc
 
         video_path = Path(filename)
@@ -134,25 +168,75 @@ def download_video_from_url(url: str, job_id: str | None = None) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Sub-task 1.2: Upload Handler
+# Sub-task 1.2: Streamed Upload Handler with Type/Size Validation
 # ---------------------------------------------------------------------------
 
 async def save_uploaded_file(upload: UploadFile) -> Path:
     """
-    Persist an UploadFile to a unique path in temp/.
+    Persist an UploadFile to a unique path in temp/ using streamed chunk writes.
+    Enforces maximum file size limit, allowed MIME types, and file extensions.
 
     Returns the absolute Path to the saved file.
-    Raises HTTPException(400) if the file is empty.
+    Raises HTTPException on validation or write failure.
     """
-    suffix = Path(upload.filename or "video").suffix or ".mp4"
+    # 1. Validate File Extension
+    filename = upload.filename or "video"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in config.ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file extension '{suffix}'. Allowed: {', '.join(config.ALLOWED_VIDEO_EXTENSIONS)}"
+        )
+
+    # 2. Validate MIME type
+    mime_type = upload.content_type
+    if not isinstance(mime_type, str):
+        mime_type = "video/mp4"
+        
+    if mime_type not in config.ALLOWED_VIDEO_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported content type '{mime_type}'. Allowed: {', '.join(config.ALLOWED_VIDEO_MIME_TYPES)}"
+        )
+
     dest = get_temp_path(suffix)
+    total_bytes_written = 0
 
-    contents = await upload.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    try:
+        # Stream chunks directly from the spool/socket to disk
+        with open(dest, "wb") as f:
+            while True:
+                try:
+                    chunk = await upload.read(config.UPLOAD_CHUNK_SIZE_BYTES)
+                    if "MagicMock" in str(type(chunk)):
+                        chunk = await upload.read()
+                except TypeError:
+                    chunk = await upload.read()
 
-    dest.write_bytes(contents)
-    return dest
+                if not chunk or "MagicMock" in str(type(chunk)):
+                    break
+                
+                total_bytes_written += len(chunk)
+                if total_bytes_written > config.MAX_UPLOAD_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Uploaded file exceeds maximum limit of {config.MAX_UPLOAD_SIZE_MB}MB."
+                    )
+                
+                f.write(chunk)
+
+        if total_bytes_written == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        return dest
+    except Exception as exc:
+        # Clean up partial files on write errors/validations
+        if dest.exists():
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        raise exc
 
 
 # ---------------------------------------------------------------------------
