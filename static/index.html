@@ -9,9 +9,9 @@
   <meta name="color-scheme" content="light" />
 
   <!-- Inline so the tab icon costs no request and no extra file: the same
-       four-bar mark the header carries. -->
+       three-bar mark the header carries. -->
   <link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F1F3EF'/%3E%3Crect x='6' y='8' width='4' height='16' rx='1.5' fill='%230E6F84'/%3E%3Crect x='13' y='8' width='4' height='16' rx='1.5' fill='%230E6F84' opacity='.65'/%3E%3Crect x='20' y='8' width='4' height='16' rx='1.5' fill='%230E6F84' opacity='.35'/%3E%3C/svg%3E" />
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F1F3EF'/%3E%3Crect x='6' y='8' width='4' height='16' rx='1.5' fill='%230A5568'/%3E%3Crect x='13' y='11' width='3.5' height='13' rx='1.5' fill='%230E6F84'/%3E%3Crect x='19.5' y='14' width='3' height='10' rx='1.5' fill='%233D93A6'/%3E%3C/svg%3E" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,11 +23,12 @@
     /* ══════════════════════════════════════════════════════════════════════
        Tokens
 
-       Four surface levels and one accent. The accent is a deep broadcast teal
-       used only where something is live or actionable: the logo mark, the
-       drop target's hover and drag states, the progress rail, and the lit
-       spans in the timeline. The primary action stays ink — it should be the
-       highest-contrast thing on the page, and no colour beats black on paper.
+       Four surface levels and one blue brand color, expressed as a small
+       tonal scale rather than one hex value copied everywhere: deep (active /
+       emphasis / the CTA), base (the default brand tone), mid (a lighter,
+       tertiary tone), soft and pale (solid tints for selected vs. hover
+       surfaces), and translucent washes for surfaces layered over white or
+       paper. Same hue throughout — only the intensity changes.
        ══════════════════════════════════════════════════════════════════════ */
     :root {
       --paper: #F1F3EF;
@@ -43,8 +44,15 @@
       --rule-hi: #C0C6BB;
 
       --accent: #0E6F84;
-      --accent-wash: rgba(14, 111, 132, 0.05);
-      --accent-wash-hi: rgba(14, 111, 132, 0.09);
+      --accent-deep: #0A5568;
+      --accent-mid: #3D93A6;
+      --accent-soft: #CFE7EC;
+      --accent-pale: #EAF4F5;
+      --accent-wash: rgba(14, 111, 132, 0.07);
+      --accent-wash-hi: rgba(14, 111, 132, 0.13);
+      --blue-gray: #6C8791;
+      --blue-gray-wash: rgba(108, 135, 145, 0.32);
+      --track: #E3EAEC;
       --danger: #B03A5B;
 
       /* 8px base. Every vertical gap below is a multiple of it. */
@@ -87,7 +95,7 @@
 
     /* Keyboard focus is always visible; pointer focus is not. */
     :focus-visible {
-      outline: 2px solid var(--ink);
+      outline: 2px solid var(--accent-deep);
       outline-offset: 3px;
       border-radius: 3px;
     }
@@ -97,8 +105,9 @@
     }
 
     /* ── Header ───────────────────────────────────────────────────────────
-       The four bars that used to float across the top edge are now the logo,
-       set against the wordmark. Same mark, attached to something.           */
+       The bars that used to float across the top edge are now the logo, set
+       against the wordmark, plus a thin gradient line stepping through the
+       same blue scale — the brand accent, not decoration.                   */
     .masthead {
       width: 100%;
       /* +64px so that after its own 32px gutters the header's contents land
@@ -107,11 +116,25 @@
       max-width: calc(var(--column) + var(--step) * 8);
       margin: 0 auto;
       padding: calc(var(--step) * 4) calc(var(--step) * 4) 0;
+      flex-shrink: 0;
+    }
+
+    .masthead-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: calc(var(--step) * 2);
-      flex-shrink: 0;
+    }
+
+    /* The brand accent: one line, the blue system stepping down in intensity
+       rather than a flat rule. Replaces the old rainbow strip with something
+       that says "one brand color" instead of "decoration". */
+    .masthead-line {
+      height: 2px;
+      margin-top: calc(var(--step) * 2);
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent-deep), var(--accent) 42%, var(--accent-mid) 72%, transparent);
+      opacity: 0.55;
     }
 
     .brand {
@@ -272,6 +295,12 @@
       text-decoration: underline;
       text-underline-offset: 3px;
       text-decoration-thickness: 1px;
+      transition: color 0.15s var(--ease);
+    }
+
+    .drop:hover .drop-action span,
+    .drop:focus-within .drop-action span {
+      color: var(--accent-deep);
     }
 
     .drop-meta {
@@ -291,7 +320,7 @@
       border: 1px solid var(--rule);
       border-left: 3px solid var(--accent);
       border-radius: var(--radius);
-      background: var(--card);
+      background: var(--accent-soft);
       padding: calc(var(--step) * 3.5) calc(var(--step) * 2.5);
     }
 
@@ -391,23 +420,28 @@
       width: 100%;
       margin-top: calc(var(--step) * 3.5);
       height: 56px;
-      background: var(--ink);
-      color: var(--paper);
-      border: 1px solid var(--ink);
+      background: var(--accent);
+      color: #FFFFFF;
+      border: 1px solid var(--accent);
       border-radius: var(--radius);
       font-family: var(--body);
       font-size: 16px;
       font-weight: 600;
       letter-spacing: -0.005em;
       cursor: pointer;
-      transition: background 0.18s var(--ease), transform 0.12s var(--ease), color 0.18s var(--ease);
+      transition: background 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.12s var(--ease), box-shadow 0.18s var(--ease);
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #000000;
+      background: var(--accent-deep);
+      border-color: var(--accent-deep);
+      box-shadow: 0 4px 14px rgba(10, 85, 104, 0.22);
     }
 
     .btn-primary:active:not(:disabled) {
+      background: var(--accent-deep);
+      border-color: var(--accent-deep);
+      box-shadow: none;
       transform: translateY(1px);
     }
 
@@ -419,10 +453,10 @@
     }
 
     .btn-primary[data-loading='true'] {
-      background: var(--ink);
-      border-color: var(--ink);
-      color: var(--paper);
-      opacity: 0.55;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #FFFFFF;
+      opacity: 0.6;
       cursor: progress;
     }
 
@@ -442,6 +476,7 @@
     .btn-ghost:hover {
       color: var(--ink);
       border-color: var(--ink);
+      background: var(--accent-pale);
     }
 
     /* Inline notice for input problems the user can fix right now. */
@@ -466,7 +501,7 @@
     .diagram {
       margin-top: calc(var(--step) * 4.5);
       padding-top: calc(var(--step) * 3);
-      border-top: 1px solid var(--rule);
+      border-top: 1px solid var(--blue-gray-wash);
     }
 
     .diagram svg {
@@ -504,7 +539,7 @@
     .rail {
       position: relative;
       height: 6px;
-      background: var(--sunk);
+      background: var(--track);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -582,9 +617,27 @@
       font-weight: 500;
     }
 
-    .step[data-state='active'] .step-mark,
+    /* Active is the strongest blue in the sequence; done recedes to the
+       mid tone so the eye reads forward, toward what's still running. */
+    .step[data-state='active'] .step-mark {
+      color: var(--accent-deep);
+      animation: breathe 1.6s var(--ease) infinite;
+    }
+
     .step[data-state='done'] .step-mark {
-      color: var(--accent);
+      color: var(--accent-mid);
+    }
+
+    @keyframes breathe {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
     }
 
     .step[data-state='done'] {
@@ -663,11 +716,21 @@
     }
 
     .clip-no {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-family: var(--mono);
       font-size: 11px;
       font-weight: 500;
       letter-spacing: 0.09em;
       color: var(--ink);
+    }
+
+    .clip-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
     .clip-dur {
@@ -828,15 +891,18 @@
 
 <body>
   <header class="masthead">
-    <span class="brand">
-      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <rect x="1" y="3" width="5" height="18" rx="2" fill="var(--accent)" />
-        <rect x="9.5" y="3" width="5" height="18" rx="2" fill="var(--accent)" opacity=".62" />
-        <rect x="18" y="3" width="5" height="18" rx="2" fill="var(--accent)" opacity=".32" />
-      </svg>
-      <span class="wordmark">ClipPods</span>
-    </span>
-    <span class="masthead-note">3 clips / video</span>
+    <div class="masthead-row">
+      <span class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="1" y="3" width="5" height="18" rx="2" fill="var(--accent-deep)" />
+          <rect x="9.5" y="7" width="4.5" height="14" rx="2" fill="var(--accent)" />
+          <rect x="17.5" y="11" width="4" height="10" rx="2" fill="var(--accent-mid)" />
+        </svg>
+        <span class="wordmark">ClipPods</span>
+      </span>
+      <span class="masthead-note">3 clips / video</span>
+    </div>
+    <div class="masthead-line" aria-hidden="true"></div>
   </header>
 
   <main class="stage">
@@ -882,17 +948,17 @@
           <text x="0" y="23" font-family="DM Mono, monospace" font-size="9" letter-spacing="1.1"
             fill="var(--ink-faint)">SOURCE</text>
           <rect x="62" y="13" width="598" height="11" rx="5.5" fill="var(--sunk)" />
-          <rect x="141" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
+          <rect x="141" y="13" width="58" height="11" rx="5.5" fill="var(--accent-deep)" />
           <rect x="331" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
-          <rect x="521" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
+          <rect x="521" y="13" width="58" height="11" rx="5.5" fill="var(--accent-mid)" />
 
           <path d="M170 27 V64 M360 27 V64 M550 27 V64" stroke="var(--rule-hi)" stroke-width="1" />
 
           <text x="0" y="85" font-family="DM Mono, monospace" font-size="9" letter-spacing="1.1"
             fill="var(--ink-faint)">CLIPS</text>
           <g>
-            <rect x="82" y="66" width="176" height="30" rx="5" fill="var(--accent)" opacity=".1" />
-            <rect x="82" y="66" width="3.5" height="30" fill="var(--accent)" />
+            <rect x="82" y="66" width="176" height="30" rx="5" fill="var(--accent-deep)" opacity=".12" />
+            <rect x="82" y="66" width="3.5" height="30" fill="var(--accent-deep)" />
             <text x="98" y="85" font-family="DM Mono, monospace" font-size="10"
               fill="var(--ink-faint)">01</text>
           </g>
@@ -903,8 +969,8 @@
               fill="var(--ink-faint)">02</text>
           </g>
           <g>
-            <rect x="462" y="66" width="176" height="30" rx="5" fill="var(--accent)" opacity=".1" />
-            <rect x="462" y="66" width="3.5" height="30" fill="var(--accent)" />
+            <rect x="462" y="66" width="176" height="30" rx="5" fill="var(--accent-mid)" opacity=".08" />
+            <rect x="462" y="66" width="3.5" height="30" fill="var(--accent-mid)" />
             <text x="478" y="85" font-family="DM Mono, monospace" font-size="10"
               fill="var(--ink-faint)">03</text>
           </g>
@@ -983,6 +1049,9 @@
     const POLL_MS = 2500;
     const MAX_POLL_FAILURES = 6;
     const CTA_LABEL = 'Generate 3 clips';
+    // Same three-tier blue as the SOURCE→CLIPS diagram, so the marker in the
+    // results grid reads as a continuation of that same idea, not a new one.
+    const CLIP_TIERS = ['#0A5568', '#0E6F84', '#3D93A6'];
 
     const el = (id) => document.getElementById(id);
 
@@ -1269,7 +1338,10 @@
 
         const no = document.createElement('span');
         no.className = 'clip-no';
-        no.textContent = 'CLIP ' + label;
+        const dot = document.createElement('span');
+        dot.className = 'clip-dot';
+        dot.style.background = CLIP_TIERS[i % CLIP_TIERS.length];
+        no.append(dot, document.createTextNode('CLIP ' + label));
 
         const time = document.createElement('span');
         time.className = 'clip-dur';
