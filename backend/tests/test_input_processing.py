@@ -30,8 +30,23 @@ def _make_upload(filename: str = "video.mp4", content: bytes = b"fake-video-byte
     return upload
 
 
-async def _async_read(data: bytes):
-    return data
+def _chunked_read(data: bytes):
+    """
+    Build a stand-in for ``UploadFile.read(size)`` that streams *data* and then
+    returns b"" — the same contract Starlette's UploadFile honours. A mock that
+    ignores the size argument and keeps returning the same bytes makes
+    save_uploaded_file loop until it trips the size limit.
+    """
+    remaining = bytearray(data)
+
+    async def _read(size: int = -1):
+        if size is None or size < 0:
+            size = len(remaining)
+        chunk = bytes(remaining[:size])
+        del remaining[:size]
+        return chunk
+
+    return _read
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +98,7 @@ class TestSaveUploadedFile:
         """Valid upload → file written to temp/, valid Path returned."""
         upload = MagicMock(spec=UploadFile)
         upload.filename = "clip.mp4"
-        upload.read = lambda: _async_read(b"fake-video-content")
+        upload.read = _chunked_read(b"fake-video-content")
 
         result = await save_uploaded_file(upload)
 
@@ -98,7 +113,7 @@ class TestSaveUploadedFile:
         """Empty upload → HTTPException 400."""
         upload = MagicMock(spec=UploadFile)
         upload.filename = "empty.mp4"
-        upload.read = lambda: _async_read(b"")
+        upload.read = _chunked_read(b"")
 
         with pytest.raises(HTTPException) as exc_info:
             await save_uploaded_file(upload)

@@ -21,6 +21,33 @@ def cleanup_file(path: Path | str) -> None:
         p.unlink()
 
 
+def cleanup_temp_artifacts(path: Path | str) -> None:
+    """
+    Delete *path* plus every sibling temp file sharing its UUID stem.
+
+    yt-dlp downloads video and audio as separate streams before merging, and
+    leaves the intermediate ``<uuid>.f401.mp4.part`` fragments behind — tens of
+    megabytes per job that only the 4-hour GC sweep would ever reclaim. Every
+    artifact for one download shares the UUID that get_temp_path() generated, so
+    matching on that prefix cleans them all without touching another job's files.
+    """
+    p = Path(path)
+    stem = p.name.split(".")[0]
+
+    # A uuid4 hex is a fixed 32 chars, so a prefix match cannot hit another job.
+    if len(stem) != 32:
+        cleanup_file(p)
+        return
+
+    for sibling in TEMP_DIR.glob(f"{stem}*"):
+        if sibling.is_file():
+            try:
+                sibling.unlink()
+            except OSError:
+                pass
+    cleanup_file(p)
+
+
 def log_instrumentation(stage: str, elapsed_time: float | None = None) -> None:
     """
     Log memory, virtual memory, disk space, current stage, and elapsed time.

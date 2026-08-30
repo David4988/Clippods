@@ -12,8 +12,14 @@ import logging
 import os
 import threading
 
-# Try to set cache dir to /tmp if on serverless
-os.environ["HF_HOME"] = "/tmp/huggingface"
+logger = logging.getLogger(__name__)
+
+# On serverless the only writable location is /tmp. On a normal machine leave the
+# default (~/.cache/huggingface) alone — pinning it to /tmp means the ~150MB model
+# is re-downloaded after every reboot, which is not something you want happening
+# in the middle of a live demo.
+if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    os.environ.setdefault("HF_HOME", "/tmp/huggingface")
 
 _model = None
 _model_init_failed = False
@@ -31,8 +37,18 @@ def get_model():
         try:
             from faster_whisper import WhisperModel
             _model = WhisperModel("base", device="cpu", compute_type="int8")
+            logger.info("Faster-Whisper 'base' model loaded (cpu/int8).")
         except Exception as e:
-            logging.warning(f"WhisperModel initialization failed: {e}. Falling back to dummy transcription.")
+            # This is a silent quality failure: the pipeline still produces three
+            # clips, but they are cut from a stub transcript rather than real
+            # speech. Log it loudly so it is caught before a demo, not during one.
+            logger.error(
+                "Faster-Whisper is unavailable (%s). Clips will be cut from a STUB "
+                "transcript and highlight selection will be meaningless. Install it "
+                "with: pip install -r backend/requirements.txt (requires Python 3.12 "
+                "or 3.13 — the 'av' dependency has no wheels for 3.14).",
+                e,
+            )
             _model_init_failed = True
             
     return _model

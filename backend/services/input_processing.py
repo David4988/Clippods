@@ -188,15 +188,23 @@ async def save_uploaded_file(upload: UploadFile) -> Path:
             detail=f"Unsupported file extension '{suffix}'. Allowed: {', '.join(config.ALLOWED_VIDEO_EXTENSIONS)}"
         )
 
-    # 2. Validate MIME type
+    # 2. Validate MIME type.
+    #
+    # The extension has already been checked against the whitelist above, so the
+    # Content-Type is a secondary signal only. Browsers routinely send an empty
+    # string or "application/octet-stream" for .mkv/.mov/.webm depending on the
+    # OS mime database — rejecting those turns a perfectly valid upload into a
+    # 400. Accept the generic/absent types and only reject a Content-Type that
+    # positively contradicts the extension (e.g. "text/plain").
     mime_type = upload.content_type
     if not isinstance(mime_type, str):
-        mime_type = "video/mp4"
-        
-    if mime_type not in config.ALLOWED_VIDEO_MIME_TYPES:
+        mime_type = ""
+    mime_type = mime_type.split(";")[0].strip().lower()
+
+    if mime_type not in config.GENERIC_UPLOAD_MIME_TYPES and mime_type not in config.ALLOWED_VIDEO_MIME_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported content type '{mime_type}'. Allowed: {', '.join(config.ALLOWED_VIDEO_MIME_TYPES)}"
+            detail=f"Unsupported content type '{mime_type}'. Allowed: {', '.join(sorted(config.ALLOWED_VIDEO_MIME_TYPES))}"
         )
 
     dest = get_temp_path(suffix)
@@ -206,16 +214,10 @@ async def save_uploaded_file(upload: UploadFile) -> Path:
         # Stream chunks directly from the spool/socket to disk
         with open(dest, "wb") as f:
             while True:
-                try:
-                    chunk = await upload.read(config.UPLOAD_CHUNK_SIZE_BYTES)
-                    if "MagicMock" in str(type(chunk)):
-                        chunk = await upload.read()
-                except TypeError:
-                    chunk = await upload.read()
-
-                if not chunk or "MagicMock" in str(type(chunk)):
+                chunk = await upload.read(config.UPLOAD_CHUNK_SIZE_BYTES)
+                if not chunk:
                     break
-                
+
                 total_bytes_written += len(chunk)
                 if total_bytes_written > config.MAX_UPLOAD_SIZE_BYTES:
                     raise HTTPException(

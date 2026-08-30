@@ -799,8 +799,13 @@ def select_segments(
 
 def _uniform_fallback(video_duration: float, max_clips: int) -> list[Segment]:
     if video_duration <= PREF_MAX_DURATION:
-        base = Segment(start=0.0, end=video_duration, score=80)
-        return [base] * max_clips
+        # Independent dicts, not `[base] * max_clips`: the caller mutates each
+        # segment in place (end extension, overlap clamping, temp-field removal),
+        # and aliasing makes one write land on all three clips.
+        return [
+            Segment(start=0.0, end=video_duration, score=80)
+            for _ in range(max_clips)
+        ]
 
     zone = video_duration / max_clips
     segments = []

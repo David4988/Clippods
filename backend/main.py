@@ -30,10 +30,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SaaS Hackathon API", version="0.1.0")
 
+# The API uses no cookies or auth headers, so credentials are not needed.
+# allow_origins=["*"] together with allow_credentials=True is an invalid
+# combination per the CORS spec and browsers reject the response.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

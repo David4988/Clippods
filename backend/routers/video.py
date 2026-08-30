@@ -31,7 +31,7 @@ from services.clip_generation import generate_clips
 from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
 from services.transcription import transcribe
-from utils import cleanup_file
+from utils import cleanup_file, cleanup_temp_artifacts
 from config import KEEP_ORIGINAL_FOR_DEBUG
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,12 @@ async def _run_pipeline(
         # Check cancellation after download/input saving
         if is_job_cancelled(job_id):
             raise HTTPException(status_code=499, detail="Job cancelled by user.")
+
+        # Uploads jump straight from 5% to 40% with a long silent gap while
+        # ffprobe + audio extraction run. Report the analysis step so the UI has
+        # something to move.
+        if job_id is not None:
+            update_job(job_id, status="extracting_audio", progress=20, message="Analyzing video...")
 
         # Duration guard (max 2 hours)
         try:
@@ -198,11 +204,22 @@ async def _run_pipeline(
         return rich_clips
     finally:
         if video_path is not None:
-            cleanup_file(video_path)
+            # Also removes yt-dlp's leftover .part fragments for this download.
+            cleanup_temp_artifacts(video_path)
             logger.info("Cleaned up video temp: %s", video_path)
         if audio_path is not None:
             cleanup_file(audio_path)
             logger.info("Cleaned up audio temp: %s", audio_path)
+
+def _job_error_message(exc: BaseException) -> str:
+    """
+    Render an exception for display in the UI. str(HTTPException) is
+    "400: <detail>", and that status-code prefix is noise for the end user.
+    """
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    return str(exc) or exc.__class__.__name__
+
 
 def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optional[Path] = None):
     """
@@ -235,7 +252,7 @@ def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optio
                     update_job(job_id, status="cancelled", error="Job cancelled by user.")
                 else:
                     logger.exception("Background job error")
-                    update_job(job_id, status="error", error=str(exc))
+                    update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
             finally:
                 if video_path and video_path.exists():
                     try:
@@ -258,7 +275,7 @@ def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optio
                 update_job(job_id, status="cancelled", error="Job cancelled by user.")
             else:
                 logger.exception("Background job error")
-                update_job(job_id, status="error", error=str(exc))
+                update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
         finally:
             if video_path and video_path.exists():
                 try:
@@ -285,7 +302,7 @@ async def process_video_url(body: VideoUrlRequest):
             clip_names = await _run_pipeline(video_url=body.video_url, job_id=job_id)
             update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
-            update_job(job_id, status="error", error=str(exc))
+            update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
         return {"job_id": job_id}
 
     def _background_run():
@@ -327,7 +344,7 @@ async def process_video_upload(file: UploadFile = File(...)):
             clip_names = await _run_pipeline(video_url=None, video_path=saved_path, job_id=job_id)
             update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
-            update_job(job_id, status="error", error=str(exc))
+            update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
         finally:
             if saved_path.exists():
                 try:

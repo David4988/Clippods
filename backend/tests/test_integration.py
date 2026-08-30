@@ -245,7 +245,8 @@ class TestCleanup:
                                   {"start": 40.0, "end": 60.0}]), \
              patch("routers.video.generate_clips",
                    return_value=[str(tmp_path / f"clip_{i}.mp4") for i in range(3)]), \
-             patch("routers.video.cleanup_file", mock_cleanup):
+             patch("routers.video.cleanup_file", mock_cleanup), \
+             patch("routers.video.cleanup_temp_artifacts", mock_cleanup):
 
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
             job_id = resp.json()["job_id"]
@@ -273,7 +274,8 @@ class TestCleanup:
              patch("routers.video.extract_audio", return_value=str(audio)), \
              patch("routers.video.transcribe",
                    side_effect=HTTPException(502, "Sarvam down")), \
-             patch("routers.video.cleanup_file", mock_cleanup):
+             patch("routers.video.cleanup_file", mock_cleanup), \
+             patch("routers.video.cleanup_temp_artifacts", mock_cleanup):
 
             resp = client.post("/process", json={"video_url": "https://x.com/v"})
             job_id = resp.json()["job_id"]

@@ -32,7 +32,18 @@ ALLOWED_VIDEO_MIME_TYPES = {
     "video/mp4",
     "video/quicktime",      # .mov
     "video/x-matroska",     # .mkv
-    "video/webm"
+    "video/x-msvideo",      # some browsers report .mkv/.mov as this
+    "video/webm",
+}
+
+# Content-Types that carry no information about the file. Browsers send these for
+# .mkv/.mov/.webm on many OS/browser combinations, so they must not be treated as
+# a rejection signal — the extension whitelist above is the real gate.
+GENERIC_UPLOAD_MIME_TYPES = {
+    "",
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/x-octet-stream",
 }
 
 # 3. Bounded Worker Queue Settings

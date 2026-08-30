@@ -4,14 +4,62 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ClipPods — AI Video Clipper</title>
-  <meta name="description"
-    content="Paste a video URL or upload a file and get 3 highlight clips in seconds, powered by Sarvam AI." />
+  <title>ClipPods — Turn long videos into shareable moments</title>
+  <meta name="description" content="Drop a video. Get back three short highlights." />
+  <meta name="color-scheme" content="light" />
+
+  <!-- Inline so the tab icon costs no request and no extra file: the same
+       four-bar mark the header carries. -->
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F1F3EF'/%3E%3Crect x='6' y='8' width='4' height='16' rx='1.5' fill='%230E6F84'/%3E%3Crect x='13' y='8' width='4' height='16' rx='1.5' fill='%230E6F84' opacity='.65'/%3E%3Crect x='20' y='8' width='4' height='16' rx='1.5' fill='%230E6F84' opacity='.35'/%3E%3C/svg%3E" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-    rel="stylesheet" />  <style>
-    /* ── Reset & base ───────────────────────────────────────────────────── */
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet" />
+
+  <style>
+    /* ══════════════════════════════════════════════════════════════════════
+       Tokens
+
+       Four surface levels and one accent. The accent is a deep broadcast teal
+       used only where something is live or actionable: the logo mark, the
+       drop target's hover and drag states, the progress rail, and the lit
+       spans in the timeline. The primary action stays ink — it should be the
+       highest-contrast thing on the page, and no colour beats black on paper.
+       ══════════════════════════════════════════════════════════════════════ */
+    :root {
+      --paper: #F1F3EF;
+      --card: #FFFFFF;
+      --sunk: #E7EAE4;
+
+      --ink: #15171A;
+      --ink-soft: #545A56;
+      /* Dark enough to clear WCAG AA at 11px on both paper and card — the
+         mono labels are small, so this cannot be as pale as it wants to be. */
+      --ink-faint: #676E68;
+      --rule: #DBDFD7;
+      --rule-hi: #C0C6BB;
+
+      --accent: #0E6F84;
+      --accent-wash: rgba(14, 111, 132, 0.05);
+      --accent-wash-hi: rgba(14, 111, 132, 0.09);
+      --danger: #B03A5B;
+
+      /* 8px base. Every vertical gap below is a multiple of it. */
+      --step: 8px;
+      --column: 660px;
+      --radius: 12px;
+      --radius-sm: 6px;
+
+      --display: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      --body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+      --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
     *,
     *::before,
     *::after {
@@ -20,2387 +68,1401 @@
       padding: 0;
     }
 
-    :root {
-      --bg: #FAFAF9;
-      --surface: #ffffff;
-      --border: #e4e4e7;
-      --accent-1: #111827;
-      --accent-2: #4f46e5;
-      --accent-glow: rgba(79, 70, 229, 0.08);
-      --accent-grad: linear-gradient(135deg, #111827, #1f2937);
-      --text: #111827;
-      --text-muted: #71717a;
-      --danger: #ef4444;
-      --danger-bg: #fef2f2;
-      --success: #10b981;
-      --success-bg: #ecfdf5;
-      --radius: 20px;
-      --radius-sm: 8px;
-      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-      --shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
-      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.03);
-    }
-
     html {
-      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
     }
 
     body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 15px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      line-height: 1.5;
     }
 
-    /* ── Typography & Containers ────────────────────────────────────────── */
-    h1, h2, h3, h4, h5 {
-      color: var(--text);
-      font-weight: 800;
-      letter-spacing: -0.03em;
+    /* Keyboard focus is always visible; pointer focus is not. */
+    :focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 3px;
+      border-radius: 3px;
     }
 
-    .container {
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 600;
-      text-decoration: none;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-      border: 1px solid transparent;
+    :focus:not(:focus-visible) {
       outline: none;
     }
 
-    .btn-primary {
-      background: #111827;
-      color: #ffffff;
-      border-color: #111827;
-    }
-
-    .btn-primary:hover {
-      background: #1f2937;
-      border-color: #1f2937;
-      transform: translateY(-1px);
-    }
-
-    .btn-secondary {
-      background: #ffffff;
-      color: #111827;
-      border-color: var(--border);
-    }
-
-    .btn-secondary:hover {
-      background: #f4f4f5;
-      transform: translateY(-1px);
-    }
-
-    .btn-lg {
-      padding: 14px 28px;
-      font-size: 15px;
-      border-radius: 10px;
-    }
-
-    .btn-md {
-      padding: 10px 20px;
-      border-radius: 8px;
-    }
-
-    /* ── Sticky Navbar ───────────────────────────────────────────────────── */
-    .navbar {
-      position: sticky;
-      top: 0;
+    /* ── Header ───────────────────────────────────────────────────────────
+       The four bars that used to float across the top edge are now the logo,
+       set against the wordmark. Same mark, attached to something.           */
+    .masthead {
       width: 100%;
-      background: rgba(250, 250, 249, 0.8);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-      z-index: 100;
-      padding: 16px 0;
-    }
-
-    .nav-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .nav-logo {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--text);
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      letter-spacing: -0.5px;
-    }
-
-    .logo-icon-dot {
-      width: 10px;
-      height: 10px;
-      background: var(--accent-2);
-      border-radius: 50%;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 32px;
-    }
-
-    .nav-links a {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 600;
-      transition: color 0.2s ease;
-    }
-
-    .nav-links a:hover {
-      color: var(--text);
-    }
-
-    /* ── Hero Section ────────────────────────────────────────────────────── */
-    .hero-section {
-      width: 100%;
-      margin: 80px 0 120px;
-    }
-
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 80px;
-      align-items: center;
-    }
-
-    .badge-pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 12px;
-      background: var(--accent-glow);
-      color: var(--accent-2);
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 24px;
-      width: fit-content;
-    }
-
-    .hero-left h1 {
-      font-size: 56px;
-      font-weight: 800;
-      color: var(--text);
-      line-height: 1.1;
-      letter-spacing: -0.04em;
-      margin-bottom: 20px;
-    }
-
-    .hero-subtitle {
-      font-size: 18px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      margin-bottom: 32px;
-      max-width: 500px;
-    }
-
-    .hero-actions {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 40px;
-    }
-
-    .social-proof {
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    /* Dashboard Mockup */
-    .dashboard-mockup {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-    }
-
-    .mockup-header {
-      background: #fafafa;
-      border-bottom: 1px solid var(--border);
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-    }
-
-    .mockup-dots {
-      display: flex;
-      gap: 6px;
-    }
-
-    .mockup-dots span {
-      width: 8px;
-      height: 8px;
-      background: #e4e4e7;
-      border-radius: 50%;
-    }
-
-    .mockup-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
+      /* +64px so that after its own 32px gutters the header's contents land
+         exactly on the 660px column: wordmark over the eyebrow, note over the
+         drop target's right edge. One spine down the page. */
+      max-width: calc(var(--column) + var(--step) * 8);
       margin: 0 auto;
-    }
-
-    .mockup-body {
-      padding: 24px;
-    }
-
-    .mockup-progress-section {
-      background: #fafafa;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-    }
-
-    .mockup-progress-info {
+      padding: calc(var(--step) * 4) calc(var(--step) * 4) 0;
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
+      gap: calc(var(--step) * 2);
+      flex-shrink: 0;
     }
 
-    .mockup-progress-bar {
-      width: 100%;
-      height: 8px;
-      background: #e4e4e7;
-      border-radius: 999px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
-
-    .mockup-progress-fill {
-      height: 100%;
-      background: var(--accent-2);
-      border-radius: 999px;
-    }
-
-    .mockup-speed-eta {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .mockup-checklist {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 24px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
-    }
-
-    .checklist-row {
+    .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-size: 13px;
-      font-weight: 500;
+      gap: calc(var(--step) * 1.5);
     }
 
-    .checklist-row.completed {
-      color: var(--success);
-    }
-
-    .checklist-row.current {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .checklist-row.pending {
-      color: var(--text-muted);
-      opacity: 0.6;
-    }
-
-    .chk-icon-mock {
-      width: 18px;
-      height: 18px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      font-size: 11px;
-    }
-
-    .checklist-row.completed .chk-icon-mock {
-      background: var(--success-bg);
-      color: var(--success);
-    }
-
-    .checklist-row.current .chk-icon-mock {
-      background: var(--accent-glow);
-      color: var(--accent-2);
-      animation: spin 2s linear infinite;
-    }
-
-    .checklist-row.pending .chk-icon-mock {
-      border: 1.5px solid var(--text-muted);
-      font-size: 0;
-    }
-
-    .mockup-preview-section {
-      text-align: left;
-    }
-
-    .preview-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-
-    .mockup-clips-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .mockup-clip-card {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      background: #fafafa;
-    }
-
-    .mockup-clip-thumb {
-      height: 100px;
-      background: #e4e4e7;
-      display: grid;
-      place-items: center;
-      color: var(--text-muted);
-    }
-
-    .mockup-play-icon {
-      width: 32px;
-      height: 32px;
-      background: #ffffff;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      font-size: 10px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .mockup-clip-info {
-      padding: 10px;
-    }
-
-    .mockup-clip-name {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-
-    .mockup-score {
-      font-size: 11px;
-      color: var(--accent-2);
-      font-weight: 700;
-    }
-
-    /* ── Features Section ────────────────────────────────────────────────── */
-    .features-section {
-      width: 100%;
-      margin-bottom: 120px;
-      scroll-margin-top: 100px;
-    }
-
-    .section-header {
-      text-align: center;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .section-header h2 {
-      font-size: 40px;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: -1px;
-      margin-bottom: 16px;
-    }
-
-    .section-header p {
-      font-size: 16px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      margin-top: 60px;
-    }
-
-    .feature-card {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px 32px;
-      text-align: left;
-      transition: all 0.3s ease;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .feature-card:hover {
-      transform: translateY(-4px);
-      box-shadow: var(--shadow);
-      border-color: #d4d4d8;
-    }
-
-    .feature-icon-box {
-      width: 48px;
-      height: 48px;
-      background: #f4f4f5;
-      border-radius: 12px;
-      display: grid;
-      place-items: center;
-      font-size: 20px;
-      margin-bottom: 24px;
-      color: var(--text);
-    }
-
-    .feature-card h3 {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 12px;
-      letter-spacing: -0.5px;
-    }
-
-    .feature-card p {
-      font-size: 15px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    /* ── How It Works ────────────────────────────────────────────────────── */
-    .how-it-works-section {
-      width: 100%;
-      margin-bottom: 120px;
-    }
-
-    .timeline {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 32px;
-      margin-top: 64px;
-    }
-
-    .timeline-step {
-      text-align: left;
-    }
-
-    .step-number {
-      width: 36px;
-      height: 36px;
-      background: #111827;
-      color: #ffffff;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 20px;
-    }
-
-    .timeline-step h4 {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-      letter-spacing: -0.4px;
-    }
-
-    .timeline-step p {
-      font-size: 14px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    /* ── Metrics Section ─────────────────────────────────────────────────── */
-    .metrics-section {
-      width: 100%;
-      background: #ffffff;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      padding: 80px 0;
-      margin-bottom: 120px;
-    }
-
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 48px;
-      text-align: center;
-    }
-
-    .metric-card h3 {
-      font-size: 56px;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: -2px;
-      margin-bottom: 8px;
-    }
-
-    .metric-card p {
-      font-size: 15px;
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-
-    /* ── Testimonials ────────────────────────────────────────────────────── */
-    .testimonials-section {
-      width: 100%;
-      margin-bottom: 120px;
-    }
-
-    .testimonials-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      margin-top: 60px;
-    }
-
-    .testimonial-card {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 32px;
-      text-align: left;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .testimonial-quote {
-      font-size: 15px;
-      color: var(--text);
-      line-height: 1.6;
-      margin-bottom: 24px;
-      font-style: italic;
-    }
-
-    .testimonial-user {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: #e4e4e7;
-      display: grid;
-      place-items: center;
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .user-info h5 {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 2px;
-    }
-
-    .user-info p {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin: 0;
-    }
-
-    /* ── Pricing Section ─────────────────────────────────────────────────── */
-    .pricing-section {
-      width: 100%;
-      margin-bottom: 120px;
-      scroll-margin-top: 100px;
-    }
-
-    .pricing-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-      margin-top: 60px;
-    }
-
-    .plan-card {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px 32px;
-      text-align: left;
-      transition: all 0.3s ease;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }
-
-    .plan-card.selected,
-    .plan-card:hover {
-      border-color: #111827;
-      box-shadow: var(--shadow);
-    }
-
-    .plan-card.selected {
-      border: 2px solid #111827;
-    }
-
-    .plan-card.selected::before {
-      content: "Popular";
-      position: absolute;
-      top: -12px;
-      left: 24px;
-      background: #111827;
-      color: #ffffff;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 999px;
-      letter-spacing: 0.5px;
-    }
-
-    .plan-header h3 {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-
-    .plan-price {
-      font-size: 36px;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: -1px;
-      margin: 16px 0 24px;
-    }
-
-    .plan-price span {
-      font-size: 14px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .plan-features {
-      list-style: none;
-      margin-bottom: 32px;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .plan-features li {
-      font-size: 14px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .plan-features li::before {
-      content: "✓";
-      color: var(--text);
-      font-weight: 800;
-    }
-
-    .plan-select-btn {
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      text-align: center;
-      border: 1px solid var(--border);
-      background: #ffffff;
-      color: var(--text);
-      transition: all 0.2s ease;
-      margin-top: auto;
-    }
-
-    .plan-card.selected .plan-select-btn,
-    .plan-select-btn:hover {
-      background: #111827;
-      color: #ffffff;
-      border-color: #111827;
-    }
-
-    /* ── FAQ Section ─────────────────────────────────────────────────────── */
-    .faq-section {
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto 120px;
-      scroll-margin-top: 100px;
-    }
-
-    .faq-list {
-      margin-top: 48px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .faq-item {
-      border-bottom: 1px solid var(--border);
-      padding: 20px 0;
-    }
-
-    .faq-item summary {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text);
-      cursor: pointer;
-      list-style: none;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      outline: none;
-      user-select: none;
-    }
-
-    .faq-item summary::-webkit-details-marker {
-      display: none;
-    }
-
-    .faq-item summary::after {
-      content: "+";
-      font-size: 20px;
-      font-weight: 400;
-      color: var(--text-muted);
-      transition: transform 0.2s ease;
-    }
-
-    .faq-item[open] summary::after {
-      content: "−";
-    }
-
-    .faq-item p {
-      font-size: 15px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      margin-top: 12px;
-      animation: slideDown 0.2s ease both;
-    }
-
-    /* ── Bottom CTA ──────────────────────────────────────────────────────── */
-    .cta-section {
-      width: 100%;
-      margin-bottom: 120px;
-    }
-
-    .cta-container {
-      background: #111827;
-      color: #ffffff;
-      border-radius: 24px;
-      padding: 80px 24px;
-      text-align: center;
-      box-shadow: var(--shadow-lg);
-    }
-
-    .cta-container h2 {
-      font-size: 48px;
-      font-weight: 800;
-      letter-spacing: -1.5px;
-      margin-bottom: 16px;
-    }
-
-    .cta-container p {
-      font-size: 18px;
-      color: #9ca3af;
-      max-width: 500px;
-      margin: 0 auto 32px;
-      line-height: 1.6;
-    }
-
-    .cta-container .btn {
-      background: #ffffff;
-      color: #111827;
-      border-color: #ffffff;
-      padding: 16px 36px;
-      font-size: 16px;
-      border-radius: 10px;
-    }
-
-    .cta-container .btn:hover {
-      background: #f4f4f5;
-      transform: translateY(-1px);
-    }
-
-    /* ── Active Application Workspace ────────────────────────────────────── */
-    .app-section {
-      width: 100%;
-      scroll-margin-top: 100px;
-      margin-bottom: 120px;
-    }
-
-    .card {
-      width: 100%;
-      max-width: 620px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 36px;
-      box-shadow: var(--shadow);
-      margin: 0 auto;
-    }
-
-    /* Mode tabs inside active app */
-    .mode-tabs {
-      display: flex;
-      gap: 8px;
-      background: #f1f5f9;
-      border-radius: 8px;
-      padding: 4px;
-      margin-bottom: 24px;
-    }
-
-    .support-bar {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text-muted);
-      background: var(--success-bg);
-      border: 1px solid rgba(10, 185, 129, 0.2);
-      border-radius: 999px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 20px;
-      width: fit-content;
-    }
-
-    .tab-btn {
-      flex: 1;
-      padding: 10px 0;
-      border: none;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--text-muted);
-      font-family: inherit;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .tab-btn.active {
-      background: var(--surface);
-      color: var(--accent-2);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .tab-btn:hover:not(.active) {
-      color: var(--text);
-    }
-
-    .panel {
-      display: none;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .panel.active {
-      display: flex;
-    }
-
-    label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
+    .brand-mark {
       display: block;
-      margin-bottom: 8px;
-      letter-spacing: -0.3px;
+      width: 17px;
+      height: 17px;
     }
 
-    input[type="url"],
-    input[type="file"] {
+    .wordmark {
+      font-family: var(--display);
+      font-weight: 800;
+      font-size: 17px;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+
+    .masthead-note {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-faint);
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Stage: the single screen everything happens on ────────────────── */
+    .stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: calc(var(--step) * 4) calc(var(--step) * 4) calc(var(--step) * 5);
       width: 100%;
-      background: #f8fafc;
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 15px;
-      transition: all 0.2s;
-      outline: none;
     }
 
-    input[type="url"] {
-      padding: 12px 16px;
+    .view {
+      width: 100%;
+      display: none;
+      animation: rise 0.4s var(--ease) both;
     }
 
-    input[type="url"]:focus {
-      border-color: var(--accent-2);
-      box-shadow: 0 0 0 3px var(--accent-glow);
-      background: var(--surface);
+    .view[data-active='true'] {
+      display: block;
     }
 
-    input[type="url"]::placeholder {
-      color: #cbd5e1;
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
     }
 
-    .file-zone {
-      border: 2px dashed var(--border);
-      border-radius: var(--radius-sm);
-      padding: 32px;
+    /* Shared eyebrow — mono, because this tool's subject is timecode. */
+    .eyebrow {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: calc(var(--step) * 1.5);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       State 1 — Idle
+       ══════════════════════════════════════════════════════════════════════ */
+    .panel {
+      max-width: var(--column);
+      margin: 0 auto;
+    }
+
+    .lede {
+      text-align: center;
+      margin-bottom: calc(var(--step) * 4);
+    }
+
+    .lede h1 {
+      font-family: var(--display);
+      font-weight: 800;
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1.05;
+      letter-spacing: -0.042em;
+      color: var(--ink);
+      text-wrap: balance;
+    }
+
+    .lede p {
+      margin-top: calc(var(--step) * 2);
+      font-size: 17px;
+      color: var(--ink-soft);
+      text-wrap: balance;
+    }
+
+    /* ── Primary input: the drop target ───────────────────────────────────
+       This is the action the product is for, so it gets the size, the white
+       surface, and the only dashed rule on the page.                        */
+    .drop {
+      position: relative;
+      border: 1.5px dashed var(--rule-hi);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: calc(var(--step) * 4.5) calc(var(--step) * 4);
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s;
-      position: relative;
-      background: #f8fafc;
+      transition: border-color 0.18s var(--ease), background 0.18s var(--ease), opacity 0.18s var(--ease);
     }
 
-    .file-zone:hover,
-    .file-zone.drag-over {
-      border-color: var(--accent-2);
-      background: #f5f3ff;
+    .drop:hover,
+    .drop:focus-within {
+      border-color: var(--accent);
+      background: var(--accent-wash);
     }
 
-    .file-zone input[type="file"] {
+    .drop[data-dragging='true'] {
+      border-color: var(--accent);
+      border-style: solid;
+      background: var(--accent-wash-hi);
+    }
+
+    .drop[data-muted='true'] {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .drop input[type='file'] {
       position: absolute;
       inset: 0;
       opacity: 0;
       cursor: pointer;
-      width: 100%;
-      height: 100%;
     }
 
-    .file-icon {
-      font-size: 32px;
-      margin-bottom: 12px;
+    .drop-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--ink);
+    }
+
+    .drop-action {
+      margin-top: calc(var(--step) * 0.5);
+      font-size: 15px;
+      color: var(--ink-soft);
+    }
+
+    .drop-action span {
+      color: var(--accent);
+      font-weight: 500;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
+    }
+
+    .drop-meta {
+      margin-top: calc(var(--step) * 2);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      letter-spacing: 0.07em;
+      color: var(--ink-faint);
+    }
+
+    /* A chosen file replaces the drop zone entirely — one thing at a time. */
+    .chosen {
+      display: none;
+      align-items: center;
+      gap: calc(var(--step) * 2);
+      border: 1px solid var(--rule);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: calc(var(--step) * 3.5) calc(var(--step) * 2.5);
+    }
+
+    .chosen[data-active='true'] {
+      display: flex;
+    }
+
+    .chosen-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 15px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chosen-size {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-faint);
+      flex-shrink: 0;
+    }
+
+    .chosen-remove {
+      flex-shrink: 0;
+      background: none;
+      border: 1px solid var(--rule-hi);
+      border-radius: var(--radius-sm);
+      color: var(--ink-soft);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 10px;
+      cursor: pointer;
+      transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+    }
+
+    .chosen-remove:hover {
+      color: var(--ink);
+      border-color: var(--ink);
+    }
+
+    /* ── Secondary input: the link ────────────────────────────────────────
+       Deliberately lighter than the drop target — shorter, sunk rather than
+       raised, and its placeholder is its label so no second label competes. */
+    .alt {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--step) * 2);
+      margin-top: calc(var(--step) * 2.5);
+    }
+
+    .alt-or {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      flex-shrink: 0;
+    }
+
+    .url-input {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
+      padding: calc(var(--step) * 1.5) calc(var(--step) * 2);
+      font-family: var(--body);
+      font-size: 14px;
+      color: var(--ink);
+      transition: border-color 0.18s var(--ease), background 0.18s var(--ease), opacity 0.18s var(--ease);
+    }
+
+    .url-input::placeholder {
+      color: var(--ink-faint);
+    }
+
+    .url-input:hover:not(:disabled) {
+      border-color: var(--rule-hi);
+    }
+
+    /* No `outline: none` here — this selector outranks :focus-visible and
+       would silently strip the keyboard focus ring. */
+    .url-input:focus {
+      border-color: var(--accent);
+      background: var(--card);
+    }
+
+    .url-input:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ── Primary action ───────────────────────────────────────────────── */
+    .btn-primary {
+      width: 100%;
+      margin-top: calc(var(--step) * 3.5);
+      height: 56px;
+      background: var(--ink);
+      color: var(--paper);
+      border: 1px solid var(--ink);
+      border-radius: var(--radius);
+      font-family: var(--body);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      cursor: pointer;
+      transition: background 0.18s var(--ease), transform 0.12s var(--ease), color 0.18s var(--ease);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #000000;
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn-primary:disabled {
+      background: var(--sunk);
+      border-color: var(--sunk);
+      color: var(--ink-faint);
+      cursor: not-allowed;
+    }
+
+    .btn-primary[data-loading='true'] {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: var(--paper);
+      opacity: 0.55;
+      cursor: progress;
+    }
+
+    .btn-ghost {
+      background: var(--card);
+      border: 1px solid var(--rule-hi);
+      border-radius: var(--radius);
+      color: var(--ink-soft);
+      padding: calc(var(--step) * 1.75) calc(var(--step) * 3);
+      font-family: var(--body);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+    }
+
+    .btn-ghost:hover {
+      color: var(--ink);
+      border-color: var(--ink);
+    }
+
+    /* Inline notice for input problems the user can fix right now. */
+    .notice {
+      display: none;
+      margin-top: calc(var(--step) * 2);
+      font-size: 13.5px;
+      color: var(--danger);
+      text-align: center;
+      text-wrap: balance;
+    }
+
+    .notice[data-active='true'] {
       display: block;
     }
 
-    .file-zone p {
-      color: var(--text-muted);
-      font-size: 14px;
-      margin: 0;
+    /* ── The product visual ───────────────────────────────────────────────
+       An edit timeline: one long source track with three lit spans, and the
+       three clips they become. It anchors the bottom of the composition and
+       states the whole product in one glance. Decorative to a screen reader —
+       the promise line above already says this in words.                    */
+    .diagram {
+      margin-top: calc(var(--step) * 4.5);
+      padding-top: calc(var(--step) * 3);
+      border-top: 1px solid var(--rule);
     }
 
-    .file-zone span {
-      color: var(--accent-2);
-      font-weight: 600;
-    }
-
-    .file-name {
-      margin-top: 12px;
-      font-size: 14px;
-      color: var(--success);
-      font-weight: 600;
-      min-height: 20px;
-    }
-
-    #submit-btn {
+    .diagram svg {
+      display: block;
       width: 100%;
-      padding: 14px;
-      margin-top: 8px;
-      border: none;
-      border-radius: var(--radius-sm);
-      background: var(--accent-grad);
-      color: #ffffff;
-      font-family: inherit;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow-sm);
-      letter-spacing: -0.3px;
+      height: auto;
     }
 
-    #submit-btn:hover:not(:disabled) {
-      background: #1f2937;
-      transform: translateY(-1px);
+    /* ══════════════════════════════════════════════════════════════════════
+       State 2 — Working
+       ══════════════════════════════════════════════════════════════════════ */
+    .working {
+      max-width: 520px;
+      margin: 0 auto;
+      text-align: center;
     }
 
-    #submit-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
+    .working h2 {
+      font-family: var(--display);
+      font-weight: 800;
+      font-size: clamp(26px, 3.4vw, 36px);
+      letter-spacing: -0.038em;
+      margin-bottom: calc(var(--step) * 1.5);
     }
 
-    #validation-warning {
-      display: none;
-      background: var(--danger-bg);
-      border: 1px solid #fecaca;
-      color: #991b1b;
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      font-size: 14px;
-      margin-top: 8px;
-      animation: shake 0.3s ease;
+    .working-sub {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: var(--ink-faint);
+      margin-bottom: calc(var(--step) * 5);
+      min-height: 1.5em;
     }
 
-    /* ── Error display ───────────────────────────────────────────────────── */
-    #error-display {
-      display: none;
-      background: var(--danger-bg);
-      border: 1px solid #fecaca;
-      border-radius: var(--radius);
-      padding: 20px;
-      margin-top: 24px;
-      max-width: 620px;
-      animation: slideIn 0.3s ease;
-      margin-left: auto;
-      margin-right: auto;
+    .rail {
+      position: relative;
+      height: 6px;
+      background: var(--sunk);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .rail-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.6s var(--ease);
+    }
+
+    /* The backend holds at one percentage through the long transcription
+       step, so the rail has to show life on its own. */
+    .rail-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+      transform: translateX(-100%);
+      animation: sweep 1.9s var(--ease) infinite;
+    }
+
+    @keyframes sweep {
+      to {
+        transform: translateX(100%);
+      }
+    }
+
+    .rail-legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: calc(var(--step) * 1.5);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      color: var(--ink-faint);
+    }
+
+    #pct {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .steps {
+      margin-top: calc(var(--step) * 5);
+      display: flex;
+      flex-direction: column;
+      gap: calc(var(--step) * 1.5);
       text-align: left;
     }
 
-    .error-icon {
-      font-size: 20px;
-      margin-right: 12px;
-    }
-
-    .error-text {
-      font-size: 14px;
-      color: #991b1b;
-    }
-
-    /* ── Results Container ───────────────────────────────────────────────── */
-    #results-container {
-      display: none;
-      width: 100%;
-      margin-top: 48px;
-    }
-
-    .results-header {
+    .step {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 16px;
+      gap: calc(var(--step) * 2);
+      font-size: 14.5px;
+      color: var(--ink-faint);
+      transition: color 0.3s var(--ease);
     }
 
-    .results-header h2 {
-      font-size: 24px;
+    .step-mark {
+      width: 18px;
+      flex-shrink: 0;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--rule-hi);
+      transition: color 0.3s var(--ease);
+    }
+
+    .step[data-state='active'] {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .step[data-state='active'] .step-mark,
+    .step[data-state='done'] .step-mark {
+      color: var(--accent);
+    }
+
+    .step[data-state='done'] {
+      color: var(--ink-soft);
+    }
+
+    .working-actions {
+      margin-top: calc(var(--step) * 5);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       State 3 — Results
+       ══════════════════════════════════════════════════════════════════════ */
+    .results {
+      max-width: 1120px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .results-head {
+      text-align: center;
+      margin-bottom: calc(var(--step) * 5);
+    }
+
+    .results-head h2 {
+      font-family: var(--display);
       font-weight: 800;
-      color: var(--text);
+      font-size: clamp(26px, 3.4vw, 36px);
+      letter-spacing: -0.038em;
     }
 
-    .clips-grid {
+    .results-head p {
+      margin-top: calc(var(--step) * 1);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: var(--ink-faint);
+    }
+
+    .clips {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 24px;
+      gap: calc(var(--step) * 3);
     }
 
-    .clip-card {
-      background: #ffffff;
-      border: 1px solid var(--border);
+    .clip {
+      border: 1px solid var(--rule);
       border-radius: var(--radius);
+      background: var(--card);
       overflow: hidden;
-      box-shadow: var(--shadow-sm);
-      animation: fadeUp 0.6s ease both;
-      text-align: left;
+      animation: rise 0.45s var(--ease) both;
+      transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
     }
 
-    .clip-card video {
-      width: 100%;
-      aspect-ratio: 16/9;
-      background: #000;
+    .clip:hover {
+      border-color: var(--rule-hi);
+      box-shadow: 0 3px 16px rgba(21, 23, 26, 0.07);
+    }
+
+    /* contain, not cover: a highlight clip is the user's content and must
+       never be cropped to fit the card. */
+    .clip video {
       display: block;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .clip-info {
-      padding: 20px;
-    }
-
-    .clip-label {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 16px;
-    }
-
-    .clip-num {
-      width: 24px;
-      height: 24px;
-      background: #111827;
-      color: #ffffff;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    .clip-actions {
-      padding: 0 20px 20px;
-    }
-
-    .download-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 16px;
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.2s ease;
-    }
-
-    .download-btn:hover {
-      background: #fafafa;
-      border-color: #111827;
-    }
-
-    /* ── Footer ──────────────────────────────────────────────────────────── */
-    .footer {
       width: 100%;
-      border-top: 1px solid var(--border);
-      padding: 48px 0;
-      background: var(--surface);
-      margin-top: 120px;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      background: #101211;
     }
 
-    .footer-container {
+    .clip-bar {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 20px;
+      gap: calc(var(--step) * 1.5);
+      padding: calc(var(--step) * 2) calc(var(--step) * 2.25);
+      border-top: 1px solid var(--rule);
     }
 
-    .footer a {
-      color: var(--text-muted);
+    .clip-no {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.09em;
+      color: var(--ink);
+    }
+
+    .clip-dur {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-faint);
+      margin-right: auto;
+    }
+
+    .clip-get {
+      font-family: var(--body);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-soft);
       text-decoration: none;
-      font-size: 14px;
-      font-weight: 600;
-      transition: color 0.2s ease;
+      border: 1px solid var(--rule-hi);
+      border-radius: var(--radius-sm);
+      padding: 6px 12px;
+      transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
     }
 
-    .footer a:hover {
-      color: var(--text);
-      text-decoration: underline;
+    .clip-get:hover {
+      color: var(--ink);
+      border-color: var(--ink);
     }
 
-    /* ── Animations ──────────────────────────────────────────────────────── */
-    @keyframes fadeDown {
-      from {
-        opacity: 0;
-        transform: translateY(-12px);
+    .results-actions {
+      margin-top: calc(var(--step) * 5);
+      display: flex;
+      justify-content: center;
+      gap: calc(var(--step) * 2);
+      flex-wrap: wrap;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       State 4 — Failed
+       ══════════════════════════════════════════════════════════════════════ */
+    .failed {
+      max-width: 440px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .failed h2 {
+      font-family: var(--display);
+      font-weight: 800;
+      font-size: clamp(24px, 3vw, 30px);
+      letter-spacing: -0.038em;
+      margin-bottom: calc(var(--step) * 1.5);
+      text-wrap: balance;
+    }
+
+    .failed p {
+      color: var(--ink-soft);
+      margin-bottom: calc(var(--step) * 4);
+      text-wrap: balance;
+    }
+
+    .failed-rule {
+      width: 32px;
+      height: 3px;
+      background: var(--danger);
+      margin: 0 auto calc(var(--step) * 3);
+    }
+
+    /* ── Screen-reader-only ───────────────────────────────────────────── */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────────── */
+    /* On a short laptop the whole tool must still fit above the fold —
+       a cut-off primary action is worse than a tight one. */
+    @media (max-height: 860px) {
+      .stage {
+        padding-top: calc(var(--step) * 2.5);
+        padding-bottom: calc(var(--step) * 3.5);
       }
 
-      to {
-        opacity: 1;
-        transform: translateY(0);
+      .lede {
+        margin-bottom: calc(var(--step) * 3);
+      }
+
+      .lede h1 {
+        font-size: clamp(28px, 3.4vw, 38px);
+      }
+
+      .lede p {
+        margin-top: calc(var(--step) * 1.5);
+        font-size: 16px;
+      }
+
+      .drop {
+        padding: calc(var(--step) * 3.5) calc(var(--step) * 4);
+      }
+
+      .diagram {
+        margin-top: calc(var(--step) * 3.5);
+        padding-top: calc(var(--step) * 2.5);
       }
     }
 
-    @keyframes fadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(12px);
+    @media (max-width: 720px) {
+      .masthead {
+        padding: calc(var(--step) * 3) calc(var(--step) * 2.5) 0;
       }
 
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
+      .stage {
+        padding: calc(var(--step) * 4) calc(var(--step) * 2.5) calc(var(--step) * 5);
       }
 
-      to {
-        opacity: 1;
-      }
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateX(-8px);
+      .drop {
+        padding: calc(var(--step) * 4.5) calc(var(--step) * 2.5);
       }
 
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    @keyframes shake {
-
-      0%,
-      100% {
-        transform: translateX(0);
+      /* Stack the link row so the field keeps a usable width. */
+      .alt {
+        flex-direction: column;
+        align-items: stretch;
+        gap: calc(var(--step) * 1.5);
       }
 
-      25% {
-        transform: translateX(-4px);
-      }
-
-      75% {
-        transform: translateX(4px);
-      }
-    }
-
-    /* ── Responsive ──────────────────────────────────────────────────────── */
-    @media (max-width: 1024px) {
-      .hero-grid {
-        grid-template-columns: 1fr;
-        gap: 48px;
+      .alt-or {
         text-align: center;
       }
-      .hero-subtitle {
-        margin-left: auto;
-        margin-right: auto;
-      }
-      .hero-actions {
-        justify-content: center;
-      }
-      .features-grid {
-        grid-template-columns: 1fr 1fr;
-      }
-      .timeline {
-        grid-template-columns: 1fr 1fr;
-      }
-      .testimonials-grid {
-        grid-template-columns: 1fr 1fr;
-      }
-      .pricing-grid {
-        grid-template-columns: 1fr 1fr;
+
+      .diagram {
+        margin-top: calc(var(--step) * 4);
       }
     }
 
-    @media (max-width: 768px) {
-      body {
-        padding: 0 0 48px;
-      }
-      .hero-left h1 {
-        font-size: 40px;
-      }
-      .features-grid,
-      .timeline,
-      .testimonials-grid,
-      .pricing-grid {
-        grid-template-columns: 1fr;
-      }
-      .nav-links {
+    @media (max-width: 420px) {
+      .masthead-note {
         display: none;
       }
-      .footer-container {
-        flex-direction: column;
-        text-align: center;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
       }
     }
   </style>
 </head>
 
 <body>
+  <header class="masthead">
+    <span class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="1" y="3" width="5" height="18" rx="2" fill="var(--accent)" />
+        <rect x="9.5" y="3" width="5" height="18" rx="2" fill="var(--accent)" opacity=".62" />
+        <rect x="18" y="3" width="5" height="18" rx="2" fill="var(--accent)" opacity=".32" />
+      </svg>
+      <span class="wordmark">ClipPods</span>
+    </span>
+    <span class="masthead-note">3 clips / video</span>
+  </header>
 
-  <!-- ── Sticky Navbar ───────────────────────────────────────────────────── -->
-  <nav class="navbar">
-    <div class="container nav-container">
-      <a href="#" class="nav-logo">
-        <div class="logo-icon-dot"></div>
-        <span>ClipPods</span>
-      </a>
-      <div class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#faq">FAQ</a>
+  <main class="stage">
+    <!-- ════════════════ State 1 — Idle ════════════════ -->
+    <section class="view panel" id="view-idle" data-active="true" aria-label="Choose a video">
+      <div class="lede">
+        <h1>Turn long videos into shareable moments.</h1>
+        <p>Drop a video. Get back three short highlights.</p>
       </div>
-      <a href="#app-section" class="btn btn-primary btn-md">Try ClipPods</a>
-    </div>
-  </nav>
 
-  <main style="width: 100%;">
-    <!-- ── Hero Section ────────────────────────────────────────────────────── -->
-    <section class="hero-section">
-      <div class="container hero-grid">
-        <div class="hero-left">
-          <div class="badge-pill">✨ Now Powered by Gemini 1.5 Pro</div>
-          <h1>Turn long videos<br>into viral clips.</h1>
-          <p class="hero-subtitle">ClipPods finds highlights, generates captions, and creates ready-to-post shorts in minutes.</p>
-          <div class="hero-actions">
-            <a href="#app-section" class="btn btn-primary btn-lg">Try ClipPods</a>
-            <a href="#features" class="btn btn-secondary btn-lg">Learn More</a>
-          </div>
-          <div class="social-proof">
-            Loved by 2,000+ creators and podcast networks.
-          </div>
+      <form id="form" novalidate>
+        <span class="eyebrow" id="drop-label">Drop a video</span>
+
+        <div class="drop" id="drop">
+          <input type="file" id="file"
+            accept=".mp4,.mov,.mkv,.webm,video/mp4,video/quicktime,video/x-matroska,video/webm"
+            aria-label="Choose a video file" />
+          <p class="drop-title">Drop your video here</p>
+          <p class="drop-action">or <span>choose a file</span></p>
+          <p class="drop-meta">MP4 · MOV · MKV · WEBM<br />up to 100 MB</p>
         </div>
-        <div class="hero-right">
-          <!-- Dashboard Mockup -->
-          <div class="dashboard-mockup">
-            <div class="mockup-header">
-              <div class="mockup-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <span class="mockup-title">dashboard.theclippods.com</span>
-            </div>
-            <div class="mockup-body">
-              <div class="mockup-progress-section">
-                <div class="mockup-progress-info">
-                  <span>Processing "Interview_with_YC_Founder.mp4"</span>
-                  <span>42%</span>
-                </div>
-                <div class="mockup-progress-bar">
-                  <div class="mockup-progress-fill" style="width: 42%;"></div>
-                </div>
-                <div class="mockup-speed-eta">
-                  Downloading audio stream • 1.2 MB/s • ETA 5s
-                </div>
-              </div>
-              <div class="mockup-checklist">
-                <div class="checklist-row completed">
-                  <span class="chk-icon-mock">✓</span>
-                  <span>Fetched video source</span>
-                </div>
-                <div class="checklist-row current">
-                  <span class="chk-icon-mock">⟳</span>
-                  <span>Extracting audio & transcribing</span>
-                </div>
-                <div class="checklist-row pending">
-                  <span class="chk-icon-mock"></span>
-                  <span>Detecting viral highlights</span>
-                </div>
-              </div>
-              <div class="mockup-preview-section">
-                <div class="preview-title">Generated Clips Preview</div>
-                <div class="mockup-clips-grid">
-                  <div class="mockup-clip-card">
-                    <div class="mockup-clip-thumb">
-                      <div class="mockup-play-icon">▶</div>
-                    </div>
-                    <div class="mockup-clip-info">
-                      <div class="mockup-clip-name">Highlight #1</div>
-                      <div class="mockup-score">Viral Score: 95%</div>
-                    </div>
-                  </div>
-                  <div class="mockup-clip-card">
-                    <div class="mockup-clip-thumb">
-                      <div class="mockup-play-icon">▶</div>
-                    </div>
-                    <div class="mockup-clip-info">
-                      <div class="mockup-clip-name">Highlight #2</div>
-                      <div class="mockup-score">Viral Score: 92%</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+
+        <div class="chosen" id="chosen">
+          <span class="chosen-name" id="chosen-name"></span>
+          <span class="chosen-size" id="chosen-size"></span>
+          <button type="button" class="chosen-remove" id="chosen-remove">Remove</button>
         </div>
+
+        <div class="alt">
+          <span class="alt-or" aria-hidden="true">or</span>
+          <label class="sr-only" for="url">Paste a YouTube link</label>
+          <input class="url-input" type="url" id="url" placeholder="Paste a YouTube link instead"
+            autocomplete="off" spellcheck="false" />
+        </div>
+
+        <button type="submit" class="btn-primary" id="go" disabled>Generate 3 clips</button>
+        <p class="notice" id="notice" role="alert"></p>
+      </form>
+
+      <!-- One long source, three lit spans, three clips. -->
+      <div class="diagram" aria-hidden="true">
+        <svg viewBox="0 0 660 100" role="presentation" focusable="false">
+          <text x="0" y="23" font-family="DM Mono, monospace" font-size="9" letter-spacing="1.1"
+            fill="var(--ink-faint)">SOURCE</text>
+          <rect x="62" y="13" width="598" height="11" rx="5.5" fill="var(--sunk)" />
+          <rect x="141" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
+          <rect x="331" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
+          <rect x="521" y="13" width="58" height="11" rx="5.5" fill="var(--accent)" />
+
+          <path d="M170 27 V64 M360 27 V64 M550 27 V64" stroke="var(--rule-hi)" stroke-width="1" />
+
+          <text x="0" y="85" font-family="DM Mono, monospace" font-size="9" letter-spacing="1.1"
+            fill="var(--ink-faint)">CLIPS</text>
+          <g>
+            <rect x="82" y="66" width="176" height="30" rx="5" fill="var(--accent)" opacity=".1" />
+            <rect x="82" y="66" width="3.5" height="30" fill="var(--accent)" />
+            <text x="98" y="85" font-family="DM Mono, monospace" font-size="10"
+              fill="var(--ink-faint)">01</text>
+          </g>
+          <g>
+            <rect x="272" y="66" width="176" height="30" rx="5" fill="var(--accent)" opacity=".1" />
+            <rect x="272" y="66" width="3.5" height="30" fill="var(--accent)" />
+            <text x="288" y="85" font-family="DM Mono, monospace" font-size="10"
+              fill="var(--ink-faint)">02</text>
+          </g>
+          <g>
+            <rect x="462" y="66" width="176" height="30" rx="5" fill="var(--accent)" opacity=".1" />
+            <rect x="462" y="66" width="3.5" height="30" fill="var(--accent)" />
+            <text x="478" y="85" font-family="DM Mono, monospace" font-size="10"
+              fill="var(--ink-faint)">03</text>
+          </g>
+        </svg>
       </div>
     </section>
 
-    <!-- ── Features Section ────────────────────────────────────────────────── -->
-    <section class="features-section" id="features">
-      <div class="container">
-        <div class="section-header">
-          <div class="badge-pill">Features</div>
-          <h2>Engineered for virality</h2>
-          <p>Everything you need to turn hours of footage into engaging, shareable short-form content.</p>
-        </div>
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon-box">🧠</div>
-            <h3>Smart Highlight Detection</h3>
-            <p>Our advanced AI analyzes pacing, tone, and audience engagement triggers to automatically isolate the most impactful clips.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon-box">💬</div>
-            <h3>Auto Captions</h3>
-            <p>Generate highly accurate, modern, animated captions in multiple styles to maximize retention on mobile feeds.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon-box">⚡</div>
-            <h3>One-Click Export</h3>
-            <p>Export all selected highlight clips instantly in vertical aspect ratios (9:16) optimized for TikTok, Reels, and Shorts.</p>
-          </div>
-        </div>
+    <!-- ════════════════ State 2 — Working ════════════════ -->
+    <section class="view working" id="view-working" aria-label="Processing">
+      <h2>Analyzing video</h2>
+      <p class="working-sub" id="working-sub">Starting up</p>
+
+      <div class="rail" id="rail" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+        aria-label="Processing progress">
+        <div class="rail-fill" id="rail-fill"></div>
+      </div>
+      <div class="rail-legend">
+        <span id="stage-name">Preparing</span>
+        <span id="pct">0%</span>
+      </div>
+
+      <div class="steps">
+        <div class="step" data-step="fetch"><span class="step-mark">○</span> Fetching video</div>
+        <div class="step" data-step="transcribe"><span class="step-mark">○</span> Transcribing audio</div>
+        <div class="step" data-step="select"><span class="step-mark">○</span> Finding highlights</div>
+        <div class="step" data-step="generate"><span class="step-mark">○</span> Generating clips</div>
+      </div>
+
+      <div class="working-actions">
+        <button type="button" class="btn-ghost" id="cancel">Cancel</button>
+      </div>
+
+      <p class="sr-only" id="live" aria-live="polite"></p>
+    </section>
+
+    <!-- ════════════════ State 3 — Results ════════════════ -->
+    <section class="view results" id="view-results" aria-label="Generated clips">
+      <div class="results-head">
+        <h2>Your highlights</h2>
+        <p id="results-count"></p>
+      </div>
+      <div class="clips" id="clips"></div>
+      <div class="results-actions">
+        <button type="button" class="btn-ghost" id="get-all">Download all</button>
+        <button type="button" class="btn-ghost" id="again">New video</button>
       </div>
     </section>
 
-    <!-- ── How It Works ────────────────────────────────────────────────────── -->
-    <section class="how-it-works-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>How it works</h2>
-          <p>Go from raw footage to viral shorts in under two minutes. No editing experience required.</p>
-        </div>
-        <div class="timeline">
-          <div class="timeline-step">
-            <div class="step-number">1</div>
-            <h4>Paste your link</h4>
-            <p>Paste any YouTube URL, podcast video link, or drag and drop your video file directly into the workspace.</p>
-          </div>
-          <div class="timeline-step">
-            <div class="step-number">2</div>
-            <h4>AI identifies hooks</h4>
-            <p>Our transcription and segmentation models scan your video to locate the most viral-worthy moments.</p>
-          </div>
-          <div class="timeline-step">
-            <div class="step-number">3</div>
-            <h4>Review and polish</h4>
-            <p>Preview each generated short, customize the templates, and check the automatic viral score.</p>
-          </div>
-          <div class="timeline-step">
-            <div class="step-number">4</div>
-            <h4>Publish & grow</h4>
-            <p>Download the high-quality 9:16 mp4 files, ready to upload and schedule directly to your social platforms.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Metrics Section ─────────────────────────────────────────────────── -->
-    <section class="metrics-section">
-      <div class="container">
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <h3>10×</h3>
-            <p>Faster Editing</p>
-          </div>
-          <div class="metric-card">
-            <h3>95%</h3>
-            <p>Time Saved</p>
-          </div>
-          <div class="metric-card">
-            <h3>3+</h3>
-            <p>Platforms Supported</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Testimonials ────────────────────────────────────────────────────── -->
-    <section class="testimonials-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>Loved by creators</h2>
-          <p>Hear from podcasters and creators who scaled their organic reach using ClipPods.</p>
-        </div>
-        <div class="testimonials-grid">
-          <div class="testimonial-card">
-            <p class="testimonial-quote">"ClipPods has completely transformed my workflow. I used to spend hours in Premiere Pro clipping out highlights. Now, I do it in 2 minutes."</p>
-            <div class="testimonial-user">
-              <div class="user-avatar">AS</div>
-              <div class="user-info">
-                <h5>Alex Stone</h5>
-                <p>Tech Podcaster</p>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <p class="testimonial-quote">"The highlight detection is spooky good. It picked the exact moment that went viral on TikTok (over 1.2M views!). Highly recommended."</p>
-            <div class="testimonial-user">
-              <div class="user-avatar">MK</div>
-              <div class="user-info">
-                <h5>Mila Kova</h5>
-                <p>Founder & Creator</p>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <p class="testimonial-quote">"I was skeptical about AI clipping tools, but ClipPods gets the context right. The captions look premium, clean, and match the vibe."</p>
-            <div class="testimonial-user">
-              <div class="user-avatar">DB</div>
-              <div class="user-info">
-                <h5>David Brown</h5>
-                <p>Marketing Consultant</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Active Application Workspace ────────────────────────────────────── -->
-    <section class="app-section" id="app-section">
-      <div class="container">
-        <div class="section-header" style="margin-bottom: 48px;">
-          <h2>Try the clipper</h2>
-          <p>Paste a link or upload a file to experience the real-time progress engine.</p>
-        </div>
-
-        <div class="card">
-          <!-- Mode tabs — Task 2.4: switching resets the other field -->
-          <div class="mode-tabs" role="tablist" aria-label="Input mode">
-            <button class="tab-btn active" id="tab-url" role="tab" aria-selected="true" aria-controls="panel-url"
-              onclick="switchTab('url')">🔗 Video URL</button>
-            <button class="tab-btn" id="tab-file" role="tab" aria-selected="false" aria-controls="panel-file"
-              onclick="switchTab('file')">📁 Upload File</button>
-          </div>
-
-          <form id="upload-form" novalidate>
-            <div class="support-bar">Supports up to 2 hours • MP4, MOV, WEBM</div>
-
-            <!-- URL panel -->
-            <div class="panel active" id="panel-url" role="tabpanel" aria-labelledby="tab-url">
-              <div>
-                <label for="video-url">Paste a YouTube or direct video URL</label>
-                <input type="url" id="video-url" placeholder="https://youtube.com/watch?v=..." autocomplete="off"
-                  spellcheck="false" />
-              </div>
-            </div>
-
-            <!-- File panel -->
-            <div class="panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file">
-              <div>
-                <label>Upload a video file (MP4, MOV, WEBM…)</label>
-                <div class="file-zone" id="file-zone">
-                  <input type="file" id="video-file" accept="video/*" aria-label="Upload video file" />
-                  <div class="file-icon">🎬</div>
-                  <p>Drag & drop here or <span>browse files</span></p>
-                  <div class="file-name" id="file-name-display"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Validation warning — Task 2.3 -->
-            <div id="validation-warning" role="alert"></div>
-
-            <!-- Submit — Task 1.2 -->
-            <button type="submit" id="submit-btn">Generate Clips</button>
-          </form>
-
-          <!-- Loading indicator — Task 1.3 / 7.2 -->
-          <div id="loading-indicator" role="status" aria-live="polite">
-            <div class="spinner" aria-hidden="true"></div>
-            <div class="loading-steps">
-              <span id="loading-label">Processing your video…</span>
-              <span id="loading-sub">This may take 1–2 minutes</span>
-            </div>
-
-            <!-- Premium Progress Card -->
-            <div class="premium-progress-container" id="premium-progress-container">
-              <!-- Progress Bar & Percentage -->
-              <div class="progress-bar-wrapper">
-                <div class="progress-bar-bg">
-                  <div id="progress-bar-fill"></div>
-                </div>
-                <span id="progress-percent">0%</span>
-              </div>
-
-              <!-- Stage info & Elapsed Timer -->
-              <div class="progress-info-row">
-                <span id="progress-stage-msg">Queued</span>
-                <span id="progress-elapsed">Elapsed: 0s</span>
-              </div>
-
-              <!-- Speed & ETA for yt-dlp -->
-              <div class="progress-speed-eta" id="progress-speed-eta" style="display: none;">
-                <span id="progress-speed-val"></span> • <span id="progress-eta-val"></span>
-              </div>
-
-              <!-- Checklist -->
-              <div class="checklist-container">
-                <div class="checklist-item pending" id="chk-download">
-                  <span class="chk-icon">○</span> <span class="chk-text">Downloaded video</span>
-                </div>
-                <div class="checklist-item pending" id="chk-audio">
-                  <span class="chk-icon">○</span> <span class="chk-text">Extracted audio</span>
-                </div>
-                <div class="checklist-item pending" id="chk-transcribe">
-                  <span class="chk-icon">○</span> <span class="chk-text">Transcribed audio</span>
-                </div>
-                <div class="checklist-item pending" id="chk-select">
-                  <span class="chk-icon">○</span> <span class="chk-text">Selected highlights</span>
-                </div>
-                <div class="checklist-item pending" id="chk-generate">
-                  <span class="chk-icon">○</span> <span class="chk-text">Generated clips</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Error display — Task 1.4 / 6.3 ────────────────────────────────── -->
-        <div id="error-display" role="alert">
-          <div class="error-icon">⚠️</div>
-          <div class="error-text">
-            <strong>Error</strong>
-            <span id="error-message"></span>
-          </div>
-        </div>
-
-        <!-- Results — Task 1.4 / 5.x ─────────────────────────────────────── -->
-        <section id="results-container" aria-label="Generated clips">
-          <div class="results-header">
-            <h2>Your Highlight Clips</h2>
-            <span class="badge" id="clip-count">3 clips</span>
-          </div>
-          <div class="clips-grid" id="clips-grid"></div>
-        </section>
-      </div>
-    </section>
-
-    <!-- ── Pricing Section ─────────────────────────────────────────────────── -->
-    <section class="pricing-section" id="pricing">
-      <div class="container">
-        <div class="section-header">
-          <div class="badge-pill">Pricing</div>
-          <h2>Simple, transparent plans</h2>
-          <p>Start clipping for free and upgrade as your channel scales.</p>
-        </div>
-        <div class="pricing-grid">
-          <!-- Free Plan -->
-          <div class="plan-card" id="plan-free">
-            <div class="plan-header">
-              <h3>Free</h3>
-              <p class="plan-price">$0 <span>/ month</span></p>
-            </div>
-            <ul class="plan-features">
-              <li>Up to 15 mins upload</li>
-              <li>3 clips per video</li>
-              <li>Standard AI detection</li>
-              <li>MP4, MOV, WEBM support</li>
-            </ul>
-            <button class="plan-select-btn" onclick="selectPlan('free')">Select Free</button>
-          </div>
-
-          <!-- Starter Plan (Highlighted/Selected by default) -->
-          <div class="plan-card selected" id="plan-starter">
-            <div class="plan-header">
-              <h3>Starter</h3>
-              <p class="plan-price">$19 <span>/ month</span></p>
-            </div>
-            <ul class="plan-features">
-              <li>Up to 1 hour upload</li>
-              <li>10 clips per video</li>
-              <li>Advanced highlight finder</li>
-              <li>Priority processing queue</li>
-            </ul>
-            <button class="plan-select-btn" onclick="selectPlan('starter')">Select Starter</button>
-          </div>
-
-          <!-- Creator Plan -->
-          <div class="plan-card" id="plan-creator">
-            <div class="plan-header">
-              <h3>Creator</h3>
-              <p class="plan-price">$49 <span>/ month</span></p>
-            </div>
-            <ul class="plan-features">
-              <li>Up to 2 hours upload</li>
-              <li>Unlimited clips</li>
-              <li>Custom branding templates</li>
-              <li>24/7 priority support</li>
-            </ul>
-            <button class="plan-select-btn" onclick="selectPlan('creator')">Select Creator</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── FAQ Section ─────────────────────────────────────────────────────── -->
-    <section class="faq-section" id="faq">
-      <div class="container">
-        <div class="section-header">
-          <h2>Frequently asked questions</h2>
-          <p>Quick answers to common questions about ClipPods.</p>
-        </div>
-        <div class="faq-list">
-          <details class="faq-item" name="faq-accordion" open>
-            <summary>How long can my source videos be?</summary>
-            <p>On our Starter plan, you can process videos up to 1 hour long. The Creator plan supports uploads up to 2 hours. Our pipeline is optimized to extract clips efficiently regardless of length.</p>
-          </details>
-          <details class="faq-item" name="faq-accordion">
-            <summary>Do captions come automatically with the clips?</summary>
-            <p>Yes, all clips are automatically transcribed using high-accuracy speech-to-text models. Captions are timed precisely to the audio and formatted in a premium style suited for mobile feeds.</p>
-          </details>
-          <details class="faq-item" name="faq-accordion">
-            <summary>Can I export directly to Shorts, Reels, and TikTok?</summary>
-            <p>Absolutely. The generated clips are saved as 9:16 vertical videos (1080x1920) which is the standard format for YouTube Shorts, Instagram Reels, and TikTok.</p>
-          </details>
-          <details class="faq-item" name="faq-accordion">
-            <summary>What file formats are supported?</summary>
-            <p>For uploads, we support MP4, MOV, WEBM, and most other common video formats. For URL links, you can paste any public YouTube video or direct video file URL.</p>
-          </details>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Bottom CTA ──────────────────────────────────────────────────────── -->
-    <section class="cta-section">
-      <div class="container">
-        <div class="cta-container">
-          <h2>Stop editing. Start publishing.</h2>
-          <p>Let AI find your best content. Get started today and see your engagement grow.</p>
-          <a href="#app-section" class="btn">Try ClipPods for Free</a>
-        </div>
-      </div>
+    <!-- ════════════════ State 4 — Failed ════════════════ -->
+    <section class="view failed" id="view-failed" aria-label="Processing failed">
+      <div class="failed-rule" aria-hidden="true"></div>
+      <h2 id="fail-title">We couldn't process this video</h2>
+      <p id="fail-body">Try another video.</p>
+      <button type="button" class="btn-ghost" id="retry">Start over</button>
     </section>
   </main>
 
-  <!-- ── Footer ──────────────────────────────────────────────────────────── -->
-  <footer class="footer">
-    <div class="container footer-container">
-      <div style="font-size: 14px; color: var(--text-muted); font-weight: 500;">
-        &copy; 2026 ClipPods. All rights reserved.
-      </div>
-      <div style="display: flex; gap: 24px;">
-        <a href="#">Twitter</a>
-        <a href="#">GitHub</a>
-        <a href="#">Contact</a>
-      </div>
-    </div>
-  </footer>
-
   <script>
-    /* ── Base URL Config ────────────────────────────────────────────────── */
-    const BASE_URL =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1"
-        ? window.location.origin
-        : "https://api.theclippods.com";
+    'use strict';
 
-    /* ── State ──────────────────────────────────────────────────────────── */
-    let activeMode = 'url';   // 'url' | 'file'
-    let isProcessing = false; // guard against duplicate requests
-    let pollTimeout = null;   // setTimeout ID for job polling
-    let activeJobToken = null; // Token to identify the currently active job/polling session
+    /* ── API base ───────────────────────────────────────────────────────
+       The backend serves this page, so the API is same-origin: localhost, a
+       LAN IP, and the Cloudflare Tunnel hostname all work with no config.
+       ?api=https://host overrides it when the page is opened elsewhere.    */
+    const API = (() => {
+      const override =
+        new URLSearchParams(window.location.search).get('api') ||
+        window.CLIPPODS_API_BASE;
+      if (override) return override.replace(/\/+$/, '');
+      if (window.location.protocol === 'file:') return 'http://127.0.0.1:8000';
+      return window.location.origin;
+    })();
 
-    /* ── DOM refs ────────────────────────────────────────────────────────── */
-    const form = document.getElementById('upload-form');
-    const videoUrlInput = document.getElementById('video-url');
-    const videoFileInput = document.getElementById('video-file');
-    const fileZone = document.getElementById('file-zone');
-    const fileNameDisp = document.getElementById('file-name-display');
-    const submitBtn = document.getElementById('submit-btn');
-    const loadingEl = document.getElementById('loading-indicator');
-    const loadingLabel = document.getElementById('loading-label');
-    const loadingSub = document.getElementById('loading-sub');
-    const errorDisplay = document.getElementById('error-display');
-    const errorMessage = document.getElementById('error-message');
-    const validationWarn = document.getElementById('validation-warning');
-    const resultsEl = document.getElementById('results-container');
-    const clipsGrid = document.getElementById('clips-grid');
-    const clipCount = document.getElementById('clip-count');
+    const MAX_BYTES = 100 * 1024 * 1024;   // Cloudflare rejects larger bodies at the edge.
+    const ALLOWED_EXT = ['.mp4', '.mov', '.mkv', '.webm'];
+    const POLL_MS = 2500;
+    const MAX_POLL_FAILURES = 6;
+    const CTA_LABEL = 'Generate 3 clips';
 
-    /* ── State variables for progress tracking ────────────────────────────── */
-    let elapsedTimer = null;
-    let processingStartTime = null;
-    let lastServerElapsed = 0;
-    let lastServerElapsedReceivedAt = Date.now();
+    const el = (id) => document.getElementById(id);
 
-    /* ── Status → UI label map ──────────────────────────────────────────── */
-    const STATUS_LABELS = {
-      queued:             ['Preparing…',              'Your job is in the queue'],
-      downloading:        ['Downloading video…',      'Fetching from source URL'],
-      extracting_audio:   ['Extracting audio…',       'Converting video to audio track'],
-      transcribing:       ['Transcribing audio…',     'Powered by Sarvam AI'],
-      selecting_segments: ['Selecting highlights…',   'Finding the best moments'],
-      generating_clips:   ['Generating clips…',       'Fast-seek stream copy via FFmpeg'],
-      completed:          ['Done',                    ''],
+    const views = {
+      idle: el('view-idle'),
+      working: el('view-working'),
+      results: el('view-results'),
+      failed: el('view-failed'),
     };
 
-    /* ── Plan Selection ──────────────────────────────────────────────────── */
-    let selectedPlan = 'starter'; // Default to starter
+    const form = el('form');
+    const urlInput = el('url');
+    const fileInput = el('file');
+    const drop = el('drop');
+    const chosen = el('chosen');
+    const goBtn = el('go');
+    const notice = el('notice');
+    const rail = el('rail');
+    const railFill = el('rail-fill');
+    const live = el('live');
 
-    function selectPlan(planType) {
-      selectedPlan = planType;
+    let jobId = null;
+    let pollTimer = null;
+    let pollToken = null;   // invalidates in-flight polls from an abandoned job
+    let submitting = false;
+    let lastClips = [];
 
-      // Update UI
-      const freeEl = document.getElementById('plan-free');
-      const starterEl = document.getElementById('plan-starter');
-      const creatorEl = document.getElementById('plan-creator');
-
-      if (freeEl) freeEl.classList.toggle('selected', planType === 'free');
-      if (starterEl) starterEl.classList.toggle('selected', planType === 'starter');
-      if (creatorEl) creatorEl.classList.toggle('selected', planType === 'creator');
-
-      // Show toast notification
-      let planName = 'Starter (1 hour)';
-      if (planType === 'free') planName = 'Free (15 min)';
-      if (planType === 'creator') planName = 'Creator (2 hours)';
-      
-      showToast(`${planName} plan selected`);
+    function show(name) {
+      for (const [key, node] of Object.entries(views)) {
+        node.dataset.active = String(key === name);
+      }
     }
 
-    function showToast(message) {
-      const toast = document.createElement('div');
-      toast.style.cssText = `
-        position: fixed; bottom: 20px; right: 20px;
-        background: var(--accent-grad); color: white;
-        padding: 12px 20px; border-radius: 8px;
-        font-weight: 600; font-size: 14px;
-        box-shadow: 0 6px 20px rgba(79, 70, 229, 0.3);
-        animation: slideIn 0.3s ease both;
-        z-index: 1000;
-      `;
-      toast.textContent = message;
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
+    /* ══════════════ Idle state ══════════════ */
+
+    function hasUrl() {
+      return urlInput.value.trim().length > 0;
     }
 
-    /* ── Tab switching (Task 2.4 — reset the other field) ────────────────── */
-    function switchTab(mode) {
-      activeMode = mode;
+    function hasFile() {
+      return fileInput.files.length > 0;
+    }
 
-      document.getElementById('tab-url').classList.toggle('active', mode === 'url');
-      document.getElementById('tab-file').classList.toggle('active', mode === 'file');
-      document.getElementById('panel-url').classList.toggle('active', mode === 'url');
-      document.getElementById('panel-file').classList.toggle('active', mode === 'file');
+    function syncIdle() {
+      // The entry points are mutually exclusive, so committing to one visibly
+      // retires the other rather than leaving both looking available.
+      const file = hasFile();
+      const url = hasUrl();
 
-      // Reset the inactive field
-      if (mode === 'url') {
-        videoFileInput.value = '';
-        fileNameDisp.textContent = '';
-      } else {
-        videoUrlInput.value = '';
+      drop.style.display = file ? 'none' : '';
+      chosen.dataset.active = String(file);
+      drop.dataset.muted = String(url && !file);
+      urlInput.disabled = file;
+      goBtn.disabled = !(file || url);
+    }
+
+    function formatSize(bytes) {
+      return bytes >= 1024 * 1024
+        ? (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+        : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+    }
+
+    function showNotice(msg) {
+      notice.textContent = msg;
+      notice.dataset.active = 'true';
+    }
+
+    function clearNotice() {
+      notice.dataset.active = 'false';
+    }
+
+    function clearFile() {
+      fileInput.value = '';
+      syncIdle();
+    }
+
+    function acceptFile(file) {
+      clearNotice();
+      if (!file) return;
+
+      const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+      if (!ALLOWED_EXT.includes(ext)) {
+        showNotice('That file type isn’t supported. Use MP4, MOV, MKV, or WebM.');
+        clearFile();
+        return;
+      }
+      if (file.size === 0) {
+        showNotice('That file is empty. Choose another video.');
+        clearFile();
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        showNotice('That file is ' + formatSize(file.size) +
+          '. The limit is 100 MB — trim it, or paste a YouTube link instead.');
+        clearFile();
+        return;
       }
 
-      hideWarning();
+      el('chosen-name').textContent = file.name;
+      el('chosen-size').textContent = formatSize(file.size);
+      syncIdle();
     }
 
-    /* ── File input UX ───────────────────────────────────────────────────── */
-    videoFileInput.addEventListener('change', () => {
-      const file = videoFileInput.files[0];
-      fileNameDisp.textContent = file ? `✓ ${file.name}` : '';
+    fileInput.addEventListener('change', () => acceptFile(fileInput.files[0]));
+    urlInput.addEventListener('input', () => { clearNotice(); syncIdle(); });
+    el('chosen-remove').addEventListener('click', () => {
+      clearNotice();
+      clearFile();
+      urlInput.focus();
     });
 
-    // Drag-and-drop
-    fileZone.addEventListener('dragover', e => { e.preventDefault(); fileZone.classList.add('drag-over'); });
-    fileZone.addEventListener('dragleave', () => fileZone.classList.remove('drag-over'));
-    fileZone.addEventListener('drop', e => {
-      e.preventDefault();
-      fileZone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith('video/')) {
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        videoFileInput.files = dt.files;
-        fileNameDisp.textContent = `✓ ${file.name}`;
-        switchTab('file');
-      }
-    });
-
-    /* ── Validation helpers ──────────────────────────────────────────────── */
-    function showWarning(msg) {
-      validationWarn.textContent = msg;
-      validationWarn.style.display = 'block';
-    }
-    function hideWarning() { validationWarn.style.display = 'none'; }
-
-    function showError(msg) {
-      errorMessage.textContent = msg;
-      errorDisplay.style.display = 'flex';
-    }
-    function hideError() { errorDisplay.style.display = 'none'; }
-
-    /* ── Stage checklist UI updater ───────────────────────────────────────── */
-    function updateChecklist(status, mode) {
-      const items = {
-        download: document.getElementById('chk-download'),
-        audio: document.getElementById('chk-audio'),
-        transcribe: document.getElementById('chk-transcribe'),
-        select: document.getElementById('chk-select'),
-        generate: document.getElementById('chk-generate')
-      };
-
-      const states = {
-        download: 'pending',
-        audio: 'pending',
-        transcribe: 'pending',
-        select: 'pending',
-        generate: 'pending'
-      };
-
-      function setItemState(elem, state) {
-        if (!elem) return;
-        const iconElem = elem.querySelector('.chk-icon');
-        if (state === 'completed') {
-          if (iconElem) iconElem.textContent = '✓';
-          elem.className = 'checklist-item completed';
-        } else if (state === 'current') {
-          if (iconElem) iconElem.textContent = '⟳';
-          elem.className = 'checklist-item current';
-        } else {
-          if (iconElem) iconElem.textContent = '○';
-          elem.className = 'checklist-item pending';
-        }
-      }
-
-      if (status === 'queued') {
-        if (mode === 'file') {
-          states.download = 'completed';
-          states.audio = 'current';
-        } else {
-          states.download = 'current';
-        }
-      } else if (status === 'downloading') {
-        states.download = 'current';
-      } else if (status === 'extracting_audio') {
-        states.download = 'completed';
-        states.audio = 'current';
-      } else if (status === 'transcribing') {
-        states.download = 'completed';
-        states.audio = 'completed';
-        states.transcribe = 'current';
-      } else if (status === 'selecting_segments') {
-        states.download = 'completed';
-        states.audio = 'completed';
-        states.transcribe = 'completed';
-        states.select = 'current';
-      } else if (status === 'generating_clips') {
-        states.download = 'completed';
-        states.audio = 'completed';
-        states.transcribe = 'completed';
-        states.select = 'completed';
-        states.generate = 'current';
-      } else if (status === 'completed') {
-        states.download = 'completed';
-        states.audio = 'completed';
-        states.transcribe = 'completed';
-        states.select = 'completed';
-        states.generate = 'completed';
-      }
-
-      setItemState(items.download, states.download);
-      setItemState(items.audio, states.audio);
-      setItemState(items.transcribe, states.transcribe);
-      setItemState(items.select, states.select);
-      setItemState(items.generate, states.generate);
-    }
-
-    /* ── Loading state ───────────────────────────────────────────────────── */
-    function startLoading(label) {
-      form.style.display = 'none';
-      loadingEl.style.display = 'flex';
-      hideError();
-      resultsEl.style.display = 'none';
-      submitBtn.disabled = true;
-      loadingLabel.textContent = label || 'Starting…';
-      loadingSub.textContent = '';
-
-      // Reset progress bar elements
-      const fillBar = document.getElementById('progress-bar-fill');
-      const pctText = document.getElementById('progress-percent');
-      const stageMsg = document.getElementById('progress-stage-msg');
-      const elapsedEl = document.getElementById('progress-elapsed');
-      const speedEtaEl = document.getElementById('progress-speed-eta');
-
-      if (fillBar) fillBar.style.width = '0%';
-      if (pctText) pctText.textContent = '0%';
-      if (stageMsg) stageMsg.textContent = 'Queued';
-      if (elapsedEl) elapsedEl.textContent = 'Elapsed: 0s';
-      if (speedEtaEl) speedEtaEl.style.display = 'none';
-
-      // Reset checklist state
-      updateChecklist('queued', activeMode);
-
-      // Start elapsed timer
-      processingStartTime = Date.now();
-      lastServerElapsed = 0;
-      lastServerElapsedReceivedAt = Date.now();
-
-      if (elapsedTimer) clearInterval(elapsedTimer);
-      elapsedTimer = setInterval(() => {
-        const localDelta = Math.floor((Date.now() - lastServerElapsedReceivedAt) / 1000);
-        const elapsedSec = lastServerElapsed + localDelta;
-        
-        const mins = Math.floor(elapsedSec / 60);
-        const secs = elapsedSec % 60;
-        
-        let timeStr = '';
-        if (mins > 0) {
-          timeStr = `${mins}m ${secs}s`;
-        } else {
-          timeStr = `${secs}s`;
-        }
-        
-        if (elapsedEl) {
-          elapsedEl.textContent = `Elapsed: ${timeStr}`;
-        }
-      }, 1000);
-    }
-
-    function updateLoadingStatus(status) {
-      const pair = STATUS_LABELS[status];
-      if (pair) {
-        loadingLabel.textContent = pair[0];
-        loadingSub.textContent = pair[1];
-      }
-    }
-
-    // Smooth-scroll navigation behavior for details element
-    document.querySelectorAll('.navbar a[href^="#"], .cta-container a[href^="#"], .hero-actions a[href^="#"]').forEach(anchor => {
-      anchor.addEventListener('click', function (e) {
+    // Drag and drop, no library needed.
+    ['dragenter', 'dragover'].forEach((evt) =>
+      drop.addEventListener(evt, (e) => {
         e.preventDefault();
-        const targetId = this.getAttribute('href');
-        if (targetId === '#') return;
-        const targetEl = document.querySelector(targetId);
-        if (targetEl) {
-          targetEl.scrollIntoView({
-            behavior: 'smooth'
-          });
-        }
+        drop.dataset.dragging = 'true';
+      })
+    );
+    ['dragleave', 'drop'].forEach((evt) =>
+      drop.addEventListener(evt, (e) => {
+        e.preventDefault();
+        drop.dataset.dragging = 'false';
+      })
+    );
+    drop.addEventListener('drop', (e) => {
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      // Route it through the file input so validation and submit stay identical.
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      acceptFile(file);
+    });
+
+    /* ══════════════ Responses ══════════════
+       Not every response comes from the app: proxies return HTML error pages
+       (413 over the size limit, 502 when the backend is down). Parsing those
+       as JSON throws, and the user would see "Unexpected token '<'".        */
+    async function readJson(resp) {
+      const raw = await resp.text();
+      try {
+        return JSON.parse(raw);
+      } catch (err) {
+        return { error: resp.status === 413 ? 'FILE_TOO_LARGE' : 'HTTP ' + resp.status };
+      }
+    }
+
+    /* Backend messages are diagnostic, not user-facing. Map them onto plain
+       language that says what to do next; keep the original in the console. */
+    function humanFailure(raw) {
+      const s = String(raw || '').toLowerCase();
+
+      if (s.includes('file_too_large') || s.includes('exceeds maximum')) {
+        return ['That video is too large',
+          'Uploads are capped at 100 MB. Trim the video, or paste a YouTube link instead.'];
+      }
+      if (s.includes('no audio')) {
+        return ['That video has no audio',
+          'ClipPods finds highlights by listening. Try a video with a soundtrack.'];
+      }
+      if (s.includes('too long') || s.includes('2 hours')) {
+        return ['That video is too long', 'Videos need to be under 2 hours. Try a shorter one.'];
+      }
+      if (s.includes('unavailable') || s.includes('download failed') || s.includes('unsupported url')) {
+        return ['We couldn’t fetch that link', 'Check that the video is public and the link is correct.'];
+      }
+      if (s.includes('timed out') || s.includes('timeout')) {
+        return ['That took too long', 'The video was still processing when we gave up. Try a shorter one.'];
+      }
+      if (s.includes('unsupported file extension') || s.includes('unsupported content type')) {
+        return ['That file type isn’t supported', 'Use MP4, MOV, MKV, or WebM.'];
+      }
+      if (s.includes('empty')) {
+        return ['That file is empty', 'Choose another video and try again.'];
+      }
+      if (s.includes('busy') || s.includes('queue is full')) {
+        return ['ClipPods is busy', 'Too many videos are processing right now. Try again in a moment.'];
+      }
+      if (s.includes('lost connection')) {
+        return ['Lost connection to the server',
+          'The video may still be processing. Check your connection and try again.'];
+      }
+      return ['We couldn’t process this video', 'Something went wrong on our end. Try another video.'];
+    }
+
+    function fail(rawMessage) {
+      if (rawMessage) console.error('[clippods]', rawMessage);
+      stopPolling();
+      const parts = humanFailure(rawMessage);
+      el('fail-title').textContent = parts[0];
+      el('fail-body').textContent = parts[1];
+      show('failed');
+      el('retry').focus();
+    }
+
+    /* ══════════════ Working state ══════════════
+       Four user-facing steps. Backend statuses describing the same visible
+       activity collapse into one — nobody needs to read "extracting_audio".  */
+    const STEP_ORDER = ['fetch', 'transcribe', 'select', 'generate'];
+    const STATUS_STEP = {
+      queued: 'fetch',
+      processing: 'fetch',
+      downloading: 'fetch',
+      extracting_audio: 'transcribe',
+      transcribing: 'transcribe',
+      selecting_segments: 'select',
+      generating_clips: 'generate',
+    };
+    const STAGE_NAME = {
+      fetch: 'Preparing',
+      transcribe: 'Transcribing',
+      select: 'Selecting',
+      generate: 'Rendering',
+    };
+
+    function renderProgress(data) {
+      const pct = Math.max(0, Math.min(100, Number(data.progress) || 0));
+      railFill.style.width = pct + '%';
+      el('pct').textContent = pct + '%';
+      rail.setAttribute('aria-valuenow', String(pct));
+
+      const step = STATUS_STEP[data.status] || 'fetch';
+      const idx = STEP_ORDER.indexOf(step);
+      el('stage-name').textContent = STAGE_NAME[step] || 'Working';
+
+      document.querySelectorAll('.step').forEach((node) => {
+        const i = STEP_ORDER.indexOf(node.dataset.step);
+        const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
+        node.dataset.state = state;
+        node.querySelector('.step-mark').textContent =
+          state === 'done' ? '✓' : state === 'active' ? '●' : '○';
+      });
+
+      // The stage already reads out in the rail legend and the step list, so
+      // this line carries what neither of those can: how long to expect to
+      // wait, and — while downloading — the number that proves it is alive.
+      el('working-sub').textContent = (data.speed && data.eta)
+        ? data.speed + ' — ' + data.eta + ' left'
+        : 'This usually takes a minute or two';
+
+      live.textContent = STAGE_NAME[step] + ', ' + pct + ' percent';
+    }
+
+    /* ══════════════ Results state ══════════════ */
+
+    function secondsToClock(sec) {
+      const s = Math.max(0, Math.round(Number(sec) || 0));
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }
+
+    function renderResults(clips) {
+      // Never assume clips exist, or that there are exactly three of them.
+      const list = Array.isArray(clips) ? clips.filter(Boolean) : [];
+      if (list.length === 0) {
+        fail('completed with no clips');
+        return;
+      }
+      lastClips = list;
+
+      const grid = el('clips');
+      grid.innerHTML = '';
+
+      list.forEach((clip, i) => {
+        const name = typeof clip === 'string' ? clip : (clip.filename || '');
+        if (!name) return;
+
+        const src = API + '/clips/' + encodeURIComponent(name);
+        const label = String(i + 1).padStart(2, '0');
+        const dur = (typeof clip === 'object' && clip.duration) ? secondsToClock(clip.duration) : '';
+
+        const card = document.createElement('article');
+        card.className = 'clip';
+        card.style.animationDelay = (i * 0.07) + 's';
+
+        const video = document.createElement('video');
+        video.src = src;
+        video.controls = true;
+        video.preload = 'metadata';
+        video.playsInline = true;
+        video.setAttribute('aria-label', 'Clip ' + label);
+
+        const bar = document.createElement('div');
+        bar.className = 'clip-bar';
+
+        const no = document.createElement('span');
+        no.className = 'clip-no';
+        no.textContent = 'CLIP ' + label;
+
+        const time = document.createElement('span');
+        time.className = 'clip-dur';
+        time.textContent = dur;
+
+        const get = document.createElement('a');
+        get.className = 'clip-get';
+        get.href = src;
+        get.download = name;
+        get.textContent = 'Download';
+        get.setAttribute('aria-label', 'Download clip ' + label);
+
+        bar.append(no, time, get);
+        card.append(video, bar);
+        grid.appendChild(card);
+      });
+
+      el('results-count').textContent =
+        list.length + ' clip' + (list.length === 1 ? '' : 's') + ' ready';
+      show('results');
+    }
+
+    el('get-all').addEventListener('click', () => {
+      // Same-origin, so a plain anchor click downloads. Stagger them so the
+      // browser does not read the burst as a popup.
+      lastClips.forEach((clip, i) => {
+        const name = typeof clip === 'string' ? clip : clip.filename;
+        if (!name) return;
+        setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = API + '/clips/' + encodeURIComponent(name);
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }, i * 400);
       });
     });
 
-    function stopLoading() {
-      // Always clear polling timeout as safety net
-      if (pollTimeout !== null) {
-        clearTimeout(pollTimeout);
-        pollTimeout = null;
+    /* ══════════════ Polling ══════════════ */
+
+    function stopPolling() {
+      pollToken = null;
+      if (pollTimer !== null) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
       }
-      if (elapsedTimer !== null) {
-        clearInterval(elapsedTimer);
-        elapsedTimer = null;
-      }
-      activeJobToken = null; // Invalidate any active job token
-      loadingEl.style.display = 'none';
-      form.style.display = 'block';
-      submitBtn.disabled = false;
-      isProcessing = false;
     }
 
-    /* ── Task 5: renderClips ─────────────────────────────────────────────── */
-    function renderClips(clips) {
-      clipsGrid.innerHTML = '';
-      clipCount.textContent = `${clips.length} clip${clips.length !== 1 ? 's' : ''}`;
+    function startPolling(id) {
+      stopPolling();
+      const token = Math.random().toString(36).slice(2);
+      pollToken = token;
+      let failures = 0;
 
-      clips.forEach((clip, i) => {
-        // Support both legacy string array and new rich object array format
-        let name = '';
-        let score = null;
-        let title = `Clip ${i + 1}`;
-        let durationStr = '';
-
-        if (typeof clip === 'string') {
-          name = clip;
-        } else if (clip && typeof clip === 'object') {
-          name = clip.filename || '';
-          score = clip.score !== undefined ? clip.score : null;
-          title = clip.title || `Clip ${i + 1}`;
-          if (clip.duration) {
-            durationStr = ` · ~${Math.round(clip.duration)} seconds`;
-          }
-        }
-
-        const src = `${BASE_URL}/clips/${name}`;
-
-        const card = document.createElement('div');
-        card.className = 'clip-card';
-        card.style.animationDelay = `${i * 0.08}s`;
-
-        // Render score badge if present
-        const scoreBadgeHtml = score !== null
-          ? `<span style="font-size: 11px; font-weight: 700; color: var(--accent-2); background: var(--accent-glow); padding: 2px 8px; border-radius: 999px; margin-left: auto;">${score}% Match</span>`
-          : '';
-
-        card.innerHTML = `
-          <video controls width="320" preload="metadata" aria-label="${title}">
-            <source src="${src}" type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
-          <div class="clip-label" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="clip-num">${i + 1}</span>
-              <span style="font-weight: 700; color: var(--text);">${title}${durationStr}</span>
-            </div>
-            ${scoreBadgeHtml}
-          </div>
-          <div class="clip-actions">
-            <a class="download-btn" href="${src}" download="${name}" aria-label="Download ${title}">
-              ⬇ Download
-            </a>
-          </div>
-        `;
-
-        clipsGrid.appendChild(card);
-      });
-
-      resultsEl.style.display = 'block';
-      resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    /* ── Polling ─────────────────────────────────────────────────────────── */
-    function startPolling(jobId) {
-      const MAX_CONSECUTIVE_FAILURES = 6;
-      let consecutiveFailures = 0;
-
-      if (pollTimeout !== null) {
-        clearTimeout(pollTimeout);
-        pollTimeout = null;
-      }
-
-      // Create a unique generation token for this polling instance
-      const token = Math.random().toString(36).substring(2);
-      activeJobToken = token;
-
-      async function poll() {
-        // Guard 1: Do not start fetch if this poll generation has been invalidated
-        if (activeJobToken !== token) {
-          return;
-        }
+      async function tick() {
+        if (pollToken !== token) return;          // a newer job superseded this one
 
         try {
-          const resp = await fetch(`${BASE_URL}/status/${jobId}`);
-          
-          // Guard 2: Invalidate if token changed during the fetch network call
-          if (activeJobToken !== token) {
-            return;
-          }
+          const resp = await fetch(API + '/status/' + id);
+          if (pollToken !== token) return;
 
-          const data = await resp.json();
-
-          // Guard 3: Invalidate if token changed during the JSON parsing
-          if (activeJobToken !== token) {
-            return;
-          }
-
-          // ── Successful response — reset failure counter ──
-          if (consecutiveFailures > 0) {
-            console.log(`[poll] Reconnected after ${consecutiveFailures} failed attempt(s)`);
-          }
-          consecutiveFailures = 0;
+          const data = await readJson(resp);
+          if (pollToken !== token) return;
 
           if (!resp.ok) {
-            activeJobToken = null;
-            if (pollTimeout !== null) {
-              clearTimeout(pollTimeout);
-              pollTimeout = null;
-            }
-            stopLoading();
-            showError(data.error || `Server error ${resp.status}`);
+            fail(data.error || 'HTTP ' + resp.status);
+            return;
+          }
+          failures = 0;
+
+          if (data.status === 'completed') {
+            stopPolling();
+            renderResults(data.clips);
+            return;
+          }
+          if (data.status === 'error') {
+            fail(data.error || 'unknown error');
+            return;
+          }
+          if (data.status === 'cancelled') {
+            stopPolling();
+            reset();
             return;
           }
 
-          const status = data.status;
-          const progress = data.progress !== undefined ? data.progress : 0;
-          const message = data.message || '';
-          const elapsedSec = data.elapsed_seconds !== undefined ? data.elapsed_seconds : 0;
-          const speedVal = data.speed;
-          const etaVal = data.eta;
-
-          // Sync server elapsed time
-          lastServerElapsed = elapsedSec;
-          lastServerElapsedReceivedAt = Date.now();
-
-          // Update progress elements
-          const fillBar = document.getElementById('progress-bar-fill');
-          const pctText = document.getElementById('progress-percent');
-          const stageMsg = document.getElementById('progress-stage-msg');
-          const speedEtaEl = document.getElementById('progress-speed-eta');
-          const speedValEl = document.getElementById('progress-speed-val');
-          const etaValEl = document.getElementById('progress-eta-val');
-
-          if (fillBar) fillBar.style.width = `${progress}%`;
-          if (pctText) pctText.textContent = `${progress}%`;
-          if (stageMsg) {
-            stageMsg.textContent = message || (STATUS_LABELS[status] ? STATUS_LABELS[status][0] : status);
-          }
-
-          // Update speed & ETA
-          if (speedVal && etaVal) {
-            if (speedValEl) speedValEl.textContent = speedVal;
-            if (etaValEl) etaValEl.textContent = `ETA ${etaVal}`;
-            if (speedEtaEl) speedEtaEl.style.display = 'flex';
-          } else {
-            if (speedEtaEl) speedEtaEl.style.display = 'none';
-          }
-
-          // Update checklist
-          updateChecklist(status, activeMode);
-
-          // Update fallback loading labels
-          if (STATUS_LABELS[status]) {
-            loadingLabel.textContent = message || STATUS_LABELS[status][0];
-            loadingSub.textContent = STATUS_LABELS[status][1];
-          }
-
-          if (status === 'completed') {
-            activeJobToken = null;
-            if (pollTimeout !== null) {
-              clearTimeout(pollTimeout);
-              pollTimeout = null;
-            }
-            if (elapsedTimer !== null) {
-              clearInterval(elapsedTimer);
-              elapsedTimer = null;
-            }
-
-            // 1. Force progress to 100%
-            if (fillBar) fillBar.style.width = '100%';
-            if (pctText) pctText.textContent = '100%';
-
-            // 2. Show finalize message
-            if (stageMsg) stageMsg.textContent = 'Finalizing clips...';
-            loadingLabel.textContent = 'Finalizing clips...';
-
-            // Mark all checklist completed
-            updateChecklist('completed', activeMode);
-
-            // 3. Wait ~600ms for animation
-            setTimeout(() => {
-              // 4. Fade out loading card and stop
-              stopLoading();
-              // 5. Render clips
-              renderClips(data.clips);
-            }, 600);
-            return;
-          }
-
-          if (status === 'error') {
-            activeJobToken = null;
-            if (pollTimeout !== null) {
-              clearTimeout(pollTimeout);
-              pollTimeout = null;
-            }
-            stopLoading();
-            showError(data.error || 'An unknown error occurred');
-            return;
-          }
-
-          // Otherwise keep polling
-          pollTimeout = setTimeout(poll, 5000);
-
+          renderProgress(data);
+          pollTimer = setTimeout(tick, POLL_MS);
         } catch (err) {
-          // Guard 4: Invalidate if token changed before error handling
-          if (activeJobToken !== token) {
+          if (pollToken !== token) return;
+
+          // A dropped request is usually transient. Keep the job on screen and
+          // retry rather than discarding a run that is still going.
+          failures += 1;
+          if (failures >= MAX_POLL_FAILURES) {
+            fail('lost connection');
             return;
           }
-
-          consecutiveFailures++;
-          console.warn(`[poll] Fetch failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, err.message);
-
-          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            // Persistent failure — give up
-            activeJobToken = null;
-            if (pollTimeout !== null) {
-              clearTimeout(pollTimeout);
-              pollTimeout = null;
-            }
-            stopLoading();
-            showError('Lost connection to server while processing.');
-            return;
-          }
-
-          // Transient failure — keep spinner, show reconnecting message
-          loadingLabel.textContent = 'Connection interrupted. Reconnecting...';
-          const stageMsg = document.getElementById('progress-stage-msg');
-          if (stageMsg) {
-            stageMsg.textContent = 'Reconnecting...';
-          }
-          loadingSub.textContent = `Attempt ${consecutiveFailures} of ${MAX_CONSECUTIVE_FAILURES}`;
-
-          // Schedule next poll even on transient failure
-          pollTimeout = setTimeout(poll, 5000);
+          el('working-sub').textContent =
+            'Reconnecting — attempt ' + failures + ' of ' + MAX_POLL_FAILURES;
+          pollTimer = setTimeout(tick, POLL_MS);
         }
       }
 
-      // Start the recursive poll
-      poll();
+      tick();
     }
 
-    /* ── Submit handler ──────────────────────────────────────────────────── */
-    form.addEventListener('submit', async e => {
+    /* ══════════════ Submit ══════════════ */
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      hideWarning();
-      hideError();
+      if (submitting) return;
+      clearNotice();
 
-      // Duplicate request guard
-      if (isProcessing) return;
-
-      const urlVal = videoUrlInput.value.trim();
-      const hasUrl = urlVal.length > 0;
-      const hasFile = videoFileInput.files.length > 0;
-
-      /* Task 2.2 / 2.3: exactly one must be filled */
-      if (!hasUrl && !hasFile) {
-        showWarning('Please provide a video URL or upload a file.');
-        return;
-      }
-      if (hasUrl && hasFile) {
-        showWarning('Please provide only a URL or only a file — not both.');
+      const url = urlInput.value.trim();
+      const file = fileInput.files[0];
+      if (!url && !file) {
+        showNotice('Add a video link or choose a file first.');
         return;
       }
 
-      isProcessing = true;
-      startLoading('Starting…');
+      submitting = true;
+      goBtn.disabled = true;
+      goBtn.dataset.loading = 'true';
+      goBtn.textContent = 'Starting…';
+
+      // Reset the working view before showing it, so a second run never
+      // inherits the previous one's progress.
+      renderProgress({ status: 'queued', progress: 0 });
+      el('working-sub').textContent = file ? 'Uploading…' : 'Starting up';
+      show('working');
 
       try {
-        let response;
-
-        if (hasUrl) {
-          /* JSON body → POST /process */
-          response = await fetch(`${BASE_URL}/process`, {
+        let resp;
+        if (file) {
+          const body = new FormData();
+          body.append('file', file);
+          resp = await fetch(API + '/process/upload', { method: 'POST', body: body });
+        } else {
+          resp = await fetch(API + '/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ video_url: urlVal }),
-          });
-        } else {
-          /* Multipart → POST /process/upload */
-          const formData = new FormData();
-          formData.append('file', videoFileInput.files[0]);
-          response = await fetch(`${BASE_URL}/process/upload`, {
-            method: 'POST',
-            body: formData,
+            body: JSON.stringify({ video_url: url }),
           });
         }
 
-        const data = await response.json();
+        const data = await readJson(resp);
+        if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+        if (!data.job_id) throw new Error('no job id returned');
 
-        if (!response.ok) {
-          throw new Error(data.error || `Server error ${response.status}`);
-        }
-
-        // Receive job_id and start polling
-        const jobId = data.job_id;
-        if (!jobId) {
-          throw new Error('No job_id received from server');
-        }
-
-        updateLoadingStatus('queued');
+        jobId = data.job_id;
         startPolling(jobId);
-
       } catch (err) {
-        stopLoading();
-        showError(err.message);
+        fail(err.message);
+      } finally {
+        submitting = false;
+        goBtn.dataset.loading = 'false';
+        goBtn.textContent = CTA_LABEL;
+        syncIdle();
       }
     });
 
-    /* Initialize with starter plan selected */
-    selectPlan('starter');
+    /* ══════════════ Cancel / reset ══════════════ */
+
+    el('cancel').addEventListener('click', async () => {
+      stopPolling();
+      const id = jobId;
+      reset();
+      if (!id) return;
+      // Best effort: the screen has already moved on, and a failed cancel only
+      // means the job runs to completion and is cleaned up on schedule.
+      try {
+        await fetch(API + '/cancel/' + id, { method: 'POST' });
+      } catch (err) {
+        console.error('[clippods] cancel failed', err);
+      }
+    });
+
+    function reset() {
+      stopPolling();
+      jobId = null;
+      lastClips = [];
+      urlInput.value = '';
+      fileInput.value = '';
+      clearNotice();
+      syncIdle();
+      show('idle');
+    }
+
+    el('again').addEventListener('click', reset);
+    el('retry').addEventListener('click', reset);
+
+    syncIdle();
   </script>
 </body>
 
