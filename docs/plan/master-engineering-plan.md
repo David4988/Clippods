@@ -83,6 +83,28 @@ Reproduce: `python -m evaluation.experiments.asr_model_compare` then
 `python -m evaluation.experiments.asr_model_compare_report <results.json>`.
 Production defaults unchanged (`ASR_PROFILE=legacy`, both profiles on `base`).
 
+### Real-world validation (9 owner-selected YouTube podcasts, 2026-09-14)
+
+Material: 3 Tamil, 3 English, 3 Hindi-labelled videos (61–175 min); podcast-body
+windows (3 × 5 min each, early/middle/late after a verified body start) plus
+separately labelled pre-body/sponsor regions. rich_v1 path, word timestamps, VAD,
+auto language. No references: judgements come from reading transcripts plus
+reference-free metrics. Scripts: `evaluation/experiments/realworld_*.py`; data in
+`eval_data/realworld/` (not in git).
+
+| ID | Observation | Limits |
+|---|---|---|
+| EV-3.1 | **English podcasts: `base` is good.** Detection p ≥ 0.99, readable accurate text, 0–3 suspect segments per 5 min, coverage 0.80–0.99, RTF 0.07–0.10, peak RSS 0.44–0.54 GB. `large-v3` agreed on 94–95 % of words, fixed some names/phrases, but also dropped an 11-word clause base caught, added fillers and a repeated clause; RTF 1.4–1.9, peak 5.0 GB. | 3 English videos (base), 1 (large-v3). |
+| EV-3.2 | **The rich_v1 script-aware compression fix (EV-2.10) causes catastrophic repetition loops on real Tamil and Hindi audio**, with both `base` and `large-v3` (e.g. "செல்லாம்," / "வருகிறது இன்னும் கொஞ்சம்" / "सब्सक्राइब" / "लुट लुट" for minutes; 90–100 % suspect segments, coverage 0–0.39). Clean read speech (EV-2.10) never showed this. **EV-2.10's conclusion does not hold for podcast audio.** | All Tamil/Hindi body windows tested. |
+| EV-3.3 | Loop diagnostic on `large-v3` (ta1 & hi1 early body): **A** fix off → no loops but temperature fallback to 1.0 on most windows, word salad with foreign tokens, RTF 4.8–8.7; **B** fix on + `condition_on_previous_text=False` → readable, deterministic (all T=0), RTF 1.1–2.1, coverage 0.57 (ta) / 0.70 (hi), only a few contained loop bursts. `base` with B stays poor (ta coverage 0.13; hi2 0.34, romanised; hi1 decoded as English). | 2 windows (large-v3), 3 windows (base); 5 min each. |
+| EV-3.4 | **Hindi-labelled podcasts are Hinglish.** `base` auto-detected `en` on hi1/hi3 (p 0.55–0.87, probes alternating hi/en) and produced **English text for Hindi speech (translation-like)**, even when it decoded as `hi` (hi1 late: "The recovery in your body automatically happens when you're sleeping", all segments `script_mismatch`). hi2 produced Urdu script, romanised Hindi or loops. No `base` Hindi window was in Devanagari. | 3 videos. |
+| EV-3.5 | **`large-v3` + B on Hinglish produces the desired code-switched form**: Hindi in Devanagari, English in Latin ("So, जो birth place effect कहता है", "हर्याना में you will find lot of wrestlers coming out"). With the fix + conditioning it instead wrote English phonetically in Devanagari before looping. `large-v3` + B on Tamil kept Tanglish naturally ("good actor imageயே marketல் அடுத்த levelக்கு"). | 1 window each. |
+| EV-3.6 | `script_mismatch` fires on correctly transcribed English inside Hindi/Tamil speech; it cannot distinguish code-switching from wrong-script output. `repeated_text` reliably catches the loops. | — |
+| EV-3.7 | The "untranscribed speech" metric (VAD regions without words) under-reports failures during loops, because loop words carry timestamps spread across real speech; usable-segment coverage is the reliable signal. | Measurement limit. |
+| EV-3.8 | Every video had pre-body material: highlight montages (28–160 s), subscribe/Spotify promos, narrated intros, title-sponsor reads (en3 154–191 s, hi1 179–234 s), music beds (non-speech level −15…−25 dB vs −40…−55 dB in conversation). `base` handled English intros and sponsor reads well; Tamil and hi2 intros looped over music. | Body starts for ta3/hi2 are estimates (chapters/SponsorBlock/audio level). |
+| EV-3.9 | Word timestamps stayed monotonic everywhere. Zero-length words and >2 s words cluster in loop/fallback output (e.g. base hi2 late: 191 zero-length words; large-v3 ta1 late: 47 zero-length, 41 > 2 s); clean English has ≤ 16 zero-length and ≤ 5 long words per 5 min. Segments on en2 reach ~30 s. | — |
+| EV-3.10 | Resources on real audio: `base` RTF 0.07–0.16, peak RSS 0.42–0.54 GB. `large-v3` RTF 1.1–3.0 (fixed decode), up to 8.7 with fallback; peak RSS 3.3–5.0 GB. | CPU int8, default threads. |
+
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 
 ---
