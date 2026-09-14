@@ -1,0 +1,286 @@
+{
+ "selected": [
+  {
+   "start": 645.0,
+   "end": 663.01,
+   "score": 98
+  },
+  {
+   "start": 1085.0,
+   "end": 1103.0,
+   "score": 98
+  },
+  {
+   "start": 1305.0,
+   "end": 1323.0,
+   "score": 98
+  }
+ ],
+ "final_clips": [
+  {
+   "clip_index": 0,
+   "candidate_id": 127,
+   "filename": null,
+   "start": 645.0,
+   "end": 663.01,
+   "duration": 18.01,
+   "pre_extension_end": 658.05,
+   "transcript_preview": "What would you do differently if you started today?",
+   "viral_score": 98,
+   "raw_score": 15.248,
+   "end_score": 6,
+   "selection_explanation": {
+    "rank": 3,
+    "total_candidates_considered": 1064,
+    "reason": "Rank #4 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 15.25 w/s",
+     "Speech ratio 0.69 (above 0.6 threshold)",
+     "Stop score 6/8 at end",
+     "Clean sentence boundary at start"
+    ],
+    "next_best_alternative": {
+     "candidate_id": 215,
+     "rank": 1,
+     "score_delta": 2.965,
+     "start": 1085.0,
+     "end": 1102.84
+    }
+   },
+   "start_reasoning": [
+    "sentence_boundary — Clean sentence start",
+    "pause_before — 3.2s pause before → natural break point",
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 sentence completion",
+    "+2 pause after (1.28s ≥ 0.8s threshold)",
+    "+1 duration 13.0s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 658.0s → 663.0s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  },
+  {
+   "clip_index": 1,
+   "candidate_id": 215,
+   "filename": null,
+   "start": 1085.0,
+   "end": 1103.0,
+   "duration": 18.0,
+   "pre_extension_end": 1102.84,
+   "transcript_preview": "And then we lost everything in about three weeks!",
+   "viral_score": 98,
+   "raw_score": 18.213,
+   "end_score": 6,
+   "selection_explanation": {
+    "rank": 1,
+    "total_candidates_considered": 1064,
+    "reason": "Rank #2 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 18.21 w/s",
+     "Speech ratio 0.80 (above 0.6 threshold)",
+     "Stop score 6/8 at end"
+    ],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [
+    "pause_before — 0.9s pause before → natural break point",
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 sentence completion",
+    "+2 pause after (0.80s ≥ 0.8s threshold)",
+    "+1 duration 17.8s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 1102.8s → 1103.0s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  },
+  {
+   "clip_index": 2,
+   "candidate_id": 258,
+   "filename": null,
+   "start": 1305.0,
+   "end": 1323.0,
+   "duration": 18.0,
+   "pre_extension_end": 1320.93,
+   "transcript_preview": "That was the moment I realised the product was the problem.",
+   "viral_score": 98,
+   "raw_score": 19.228,
+   "end_score": 6,
+   "selection_explanation": {
+    "rank": 0,
+    "total_candidates_considered": 1064,
+    "reason": "Rank #1 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 19.23 w/s",
+     "Speech ratio 0.78 (above 0.6 threshold)",
+     "Stop score 6/8 at end",
+     "Clean sentence boundary at start"
+    ],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [
+    "sentence_boundary — Clean sentence start",
+    "pause_before — 4.4s pause before → natural break point",
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 sentence completion",
+    "+2 pause after (1.52s ≥ 0.8s threshold)",
+    "+1 duration 15.9s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 1320.9s → 1323.0s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  }
+ ],
+ "decision_log": [
+  {
+   "step": 1,
+   "event": "sliding_window_scan",
+   "detail": "Scanned 1078 windows (step=5.0s), produced 1064 raw candidates"
+  },
+  {
+   "step": 2,
+   "event": "filter_results",
+   "detail": "14 filtered out (0 no_stopping_point, 0 no_speech, 14 failed_energy_filter)"
+  },
+  {
+   "step": 3,
+   "event": "dedup",
+   "detail": "1064 raw → 1064 unique (start,end) positions (kept best score per position)"
+  },
+  {
+   "step": 4,
+   "event": "rank_and_select",
+   "detail": "Sorted 1064 candidates by score descending. Selected top 3 non-overlapping."
+  },
+  {
+   "step": 5,
+   "event": "fallback_check",
+   "detail": "3/3 slots filled from ranked candidates. No fallback needed."
+  },
+  {
+   "step": 6,
+   "event": "end_extension",
+   "detail": "Applied _align_end: clip [1305.0s] extended 1320.9s → 1323.0s; clip [1085.0s] extended 1102.8s → 1103.0s; clip [645.0s] extended 658.0s → 663.0s"
+  },
+  {
+   "step": 7,
+   "event": "overlap_clamp",
+   "detail": "No adjacent clips overlapped after extension"
+  }
+ ],
+ "stats": {
+  "total_windows_evaluated": 1078,
+  "total_candidates": 1064,
+  "unique_after_dedup": 1064,
+  "selected": 3,
+  "rejected": 1061,
+  "from_fallback": 0,
+  "duplicated": 0,
+  "rejection_breakdown": {
+   "lower_score": 1060,
+   "overlap": 1
+  },
+  "filter_breakdown": {
+   "failed_energy_filter": 14
+  },
+  "duration": {
+   "min": 8.01,
+   "max": 19.99,
+   "mean": 14.574,
+   "distribution": [
+    {
+     "range": "8-10s",
+     "count": 86
+    },
+    {
+     "range": "10-12s",
+     "count": 96
+    },
+    {
+     "range": "12-14s",
+     "count": 260
+    },
+    {
+     "range": "14-16s",
+     "count": 277
+    },
+    {
+     "range": "16-18s",
+     "count": 198
+    },
+    {
+     "range": "18-20s",
+     "count": 147
+    }
+   ]
+  },
+  "word_density": {
+   "min": 0.955,
+   "max": 19.228,
+   "mean": 5.472
+  },
+  "speech_ratio": {
+   "min": 0.602,
+   "max": 1.234,
+   "mean": 0.883
+  },
+  "stop_scores": {
+   "min": 2,
+   "max": 6,
+   "mean": 4.955,
+   "distribution": [
+    {
+     "score": 2,
+     "count": 38
+    },
+    {
+     "score": 3,
+     "count": 40
+    },
+    {
+     "score": 4,
+     "count": 349
+    },
+    {
+     "score": 5,
+     "count": 142
+    },
+    {
+     "score": 6,
+     "count": 495
+    }
+   ]
+  }
+ },
+ "counts": {
+  "transcript_segments": 979,
+  "candidates": 1064,
+  "filtered_windows": 14
+ },
+ "candidates_sha256": "653f430b2d65b184d8f671f140d8464831c84ee07643529c14a6904378484f26",
+ "filtered_windows_sha256": "1490a0d7e03ce5f0dbe7950ddb199c10d38f609c7946a4574b88651954d0d9ec",
+ "config": {
+  "min_duration": 8.0,
+  "pref_min_duration": 12.0,
+  "pref_max_duration": 15.0,
+  "max_duration": 20.0,
+  "pause_threshold": 0.8,
+  "buffer": 3.0,
+  "min_start": 5.0,
+  "step": 5.0,
+  "energy_ratio_threshold": 0.6,
+  "max_clips": 3
+ },
+ "algorithm_version": "adaptive_v2"
+}

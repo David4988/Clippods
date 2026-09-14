@@ -36,3 +36,6 @@ ffmpeg-*-static/
 .vscode/
 .idea/
 .vercel/
+
+# Offline evaluation data: media, stage cache, run artifacts (never commit media)
+eval_data/

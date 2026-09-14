@@ -1,0 +1,20 @@
+{
+ "analysis_mode_raises": "TypeError: unsupported operand type(s) for -: 'float' and 'str'",
+ "selected_without_analysis": [
+  {
+   "start": 12.5,
+   "end": 30.5,
+   "score": 82
+  },
+  {
+   "start": 52.5,
+   "end": 70.5,
+   "score": 81
+  },
+  {
+   "start": 92.5,
+   "end": 110.5,
+   "score": 80
+  }
+ ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "clippods-eval-manifest/1",
+  "dataset": "clippods-eval",
+  "version": "v1",
+  "frozen": false,
+  "description": "Frozen evaluation set for ClipPods clip selection. Items are added in Phase 2 by the product owner; see README.md in this folder for the target composition. Set frozen=true only after review; never edit a frozen manifest (create v2 instead).",
+  "items": []
+}

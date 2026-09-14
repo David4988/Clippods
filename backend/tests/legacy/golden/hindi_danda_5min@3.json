@@ -1,0 +1,280 @@
+{
+ "selected": [
+  {
+   "start": 65.0,
+   "end": 84.79,
+   "score": 98
+  },
+  {
+   "start": 120.0,
+   "end": 138.0,
+   "score": 98
+  },
+  {
+   "start": 200.0,
+   "end": 218.0,
+   "score": 98
+  }
+ ],
+ "final_clips": [
+  {
+   "clip_index": 0,
+   "candidate_id": 12,
+   "filename": null,
+   "start": 65.0,
+   "end": 84.79,
+   "duration": 19.79,
+   "pre_extension_end": 78.14,
+   "transcript_preview": "लोग सोचते हैं कि पैसा ही सब कुछ है।",
+   "viral_score": 98,
+   "raw_score": 13.711,
+   "end_score": 4,
+   "selection_explanation": {
+    "rank": 1,
+    "total_candidates_considered": 57,
+    "reason": "Rank #2 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 13.71 w/s",
+     "Speech ratio 0.79 (above 0.6 threshold)",
+     "Stop score 4/8 at end"
+    ],
+    "next_best_alternative": {
+     "candidate_id": 23,
+     "rank": 2,
+     "score_delta": -1.646,
+     "start": 120.0,
+     "end": 137.53
+    }
+   },
+   "start_reasoning": [
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 pause after (1.12s ≥ 0.8s threshold)",
+    "+1 duration 13.1s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 78.1s → 84.8s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  },
+  {
+   "clip_index": 1,
+   "candidate_id": 23,
+   "filename": null,
+   "start": 120.0,
+   "end": 138.0,
+   "duration": 18.0,
+   "pre_extension_end": 137.53,
+   "transcript_preview": "आप आज शुरू करते तो क्या अलग करते?",
+   "viral_score": 98,
+   "raw_score": 12.065,
+   "end_score": 4,
+   "selection_explanation": {
+    "rank": 2,
+    "total_candidates_considered": 57,
+    "reason": "Rank #3 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 12.06 w/s",
+     "Speech ratio 0.76 (above 0.6 threshold)",
+     "Stop score 4/8 at end"
+    ],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 sentence completion",
+    "+1 duration 17.5s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 137.5s → 138.0s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  },
+  {
+   "clip_index": 2,
+   "candidate_id": 39,
+   "filename": null,
+   "start": 200.0,
+   "end": 218.0,
+   "duration": 18.0,
+   "pre_extension_end": 216.72,
+   "transcript_preview": "सबसे बड़ी गलती हमने पहले साल में की।",
+   "viral_score": 98,
+   "raw_score": 14.675,
+   "end_score": 4,
+   "selection_explanation": {
+    "rank": 0,
+    "total_candidates_considered": 57,
+    "reason": "Rank #1 non-overlapping candidate by score",
+    "key_strengths": [
+     "Word density 14.68 w/s",
+     "Speech ratio 0.82 (above 0.6 threshold)",
+     "Stop score 4/8 at end"
+    ],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [
+    "pause_before — 0.8s pause before → natural break point",
+    "mid_sentence_start — Not cutting mid-sentence",
+    "filler_word — No filler detected"
+   ],
+   "end_reasoning": [
+    "+2 pause after (1.26s ≥ 0.8s threshold)",
+    "+1 duration 16.7s ≥ preferred minimum 12.0s",
+    "+1 transcript segment boundary",
+    "Extended from 216.7s → 218.0s to reach sentence boundary"
+   ],
+   "from_fallback": false,
+   "duplicated": false
+  }
+ ],
+ "decision_log": [
+  {
+   "step": 1,
+   "event": "sliding_window_scan",
+   "detail": "Scanned 58 windows (step=5.0s), produced 57 raw candidates"
+  },
+  {
+   "step": 2,
+   "event": "filter_results",
+   "detail": "1 filtered out (1 no_stopping_point, 0 no_speech, 0 failed_energy_filter)"
+  },
+  {
+   "step": 3,
+   "event": "dedup",
+   "detail": "57 raw → 57 unique (start,end) positions (kept best score per position)"
+  },
+  {
+   "step": 4,
+   "event": "rank_and_select",
+   "detail": "Sorted 57 candidates by score descending. Selected top 3 non-overlapping."
+  },
+  {
+   "step": 5,
+   "event": "fallback_check",
+   "detail": "3/3 slots filled from ranked candidates. No fallback needed."
+  },
+  {
+   "step": 6,
+   "event": "end_extension",
+   "detail": "Applied _align_end: clip [200.0s] extended 216.7s → 218.0s; clip [65.0s] extended 78.1s → 84.8s; clip [120.0s] extended 137.5s → 138.0s"
+  },
+  {
+   "step": 7,
+   "event": "overlap_clamp",
+   "detail": "No adjacent clips overlapped after extension"
+  }
+ ],
+ "stats": {
+  "total_windows_evaluated": 58,
+  "total_candidates": 57,
+  "unique_after_dedup": 57,
+  "selected": 3,
+  "rejected": 54,
+  "from_fallback": 0,
+  "duplicated": 0,
+  "rejection_breakdown": {
+   "lower_score": 54
+  },
+  "filter_breakdown": {
+   "no_stopping_point": 1
+  },
+  "duration": {
+   "min": 8.62,
+   "max": 19.98,
+   "mean": 14.185,
+   "distribution": [
+    {
+     "range": "8-10s",
+     "count": 5
+    },
+    {
+     "range": "10-12s",
+     "count": 6
+    },
+    {
+     "range": "12-14s",
+     "count": 14
+    },
+    {
+     "range": "14-16s",
+     "count": 18
+    },
+    {
+     "range": "16-18s",
+     "count": 8
+    },
+    {
+     "range": "18-20s",
+     "count": 6
+    }
+   ]
+  },
+  "word_density": {
+   "min": 1.327,
+   "max": 14.675,
+   "mean": 5.982
+  },
+  "speech_ratio": {
+   "min": 0.663,
+   "max": 1.157,
+   "mean": 0.87
+  },
+  "stop_scores": {
+   "min": 1,
+   "max": 6,
+   "mean": 3.702,
+   "distribution": [
+    {
+     "score": 1,
+     "count": 1
+    },
+    {
+     "score": 2,
+     "count": 7
+    },
+    {
+     "score": 3,
+     "count": 8
+    },
+    {
+     "score": 4,
+     "count": 36
+    },
+    {
+     "score": 5,
+     "count": 2
+    },
+    {
+     "score": 6,
+     "count": 3
+    }
+   ]
+  }
+ },
+ "counts": {
+  "transcript_segments": 56,
+  "candidates": 57,
+  "filtered_windows": 1
+ },
+ "candidates_sha256": "70222725475e42411c21fadbd618bab0d70f32195edffe7c02b47e2b8e008002",
+ "filtered_windows_sha256": "e8b69cb92af8a0419d20dd9c16d756aee709ddc3ae0338f42bfbee971f7c1da1",
+ "config": {
+  "min_duration": 8.0,
+  "pref_min_duration": 12.0,
+  "pref_max_duration": 15.0,
+  "max_duration": 20.0,
+  "pause_threshold": 0.8,
+  "buffer": 3.0,
+  "min_start": 5.0,
+  "step": 5.0,
+  "energy_ratio_threshold": 0.6,
+  "max_clips": 3
+ },
+ "algorithm_version": "adaptive_v2"
+}

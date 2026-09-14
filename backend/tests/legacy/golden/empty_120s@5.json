@@ -1,0 +1,277 @@
+{
+ "selected": [
+  {
+   "start": 4.5,
+   "end": 22.5,
+   "score": 82
+  },
+  {
+   "start": 28.5,
+   "end": 46.5,
+   "score": 81
+  },
+  {
+   "start": 52.5,
+   "end": 70.5,
+   "score": 80
+  },
+  {
+   "start": 76.5,
+   "end": 94.5,
+   "score": 79
+  },
+  {
+   "start": 100.5,
+   "end": 118.5,
+   "score": 78
+  }
+ ],
+ "final_clips": [
+  {
+   "clip_index": 0,
+   "candidate_id": null,
+   "filename": null,
+   "start": 4.5,
+   "end": 22.5,
+   "duration": 18.0,
+   "pre_extension_end": 19.5,
+   "transcript_preview": "",
+   "viral_score": 82,
+   "raw_score": 0,
+   "end_score": 0,
+   "selection_explanation": {
+    "rank": 0,
+    "total_candidates_considered": 0,
+    "reason": "Rank #1 non-overlapping candidate by score",
+    "key_strengths": [],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [],
+   "end_reasoning": [
+    "Extended from 19.5s → 22.5s to reach sentence boundary"
+   ],
+   "from_fallback": true,
+   "duplicated": false
+  },
+  {
+   "clip_index": 1,
+   "candidate_id": null,
+   "filename": null,
+   "start": 28.5,
+   "end": 46.5,
+   "duration": 18.0,
+   "pre_extension_end": 43.5,
+   "transcript_preview": "",
+   "viral_score": 81,
+   "raw_score": 0,
+   "end_score": 0,
+   "selection_explanation": {
+    "rank": 1,
+    "total_candidates_considered": 0,
+    "reason": "Rank #2 non-overlapping candidate by score",
+    "key_strengths": [],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [],
+   "end_reasoning": [
+    "Extended from 43.5s → 46.5s to reach sentence boundary"
+   ],
+   "from_fallback": true,
+   "duplicated": false
+  },
+  {
+   "clip_index": 2,
+   "candidate_id": null,
+   "filename": null,
+   "start": 52.5,
+   "end": 70.5,
+   "duration": 18.0,
+   "pre_extension_end": 67.5,
+   "transcript_preview": "",
+   "viral_score": 80,
+   "raw_score": 0,
+   "end_score": 0,
+   "selection_explanation": {
+    "rank": 2,
+    "total_candidates_considered": 0,
+    "reason": "Rank #3 non-overlapping candidate by score",
+    "key_strengths": [],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [],
+   "end_reasoning": [
+    "Extended from 67.5s → 70.5s to reach sentence boundary"
+   ],
+   "from_fallback": true,
+   "duplicated": false
+  },
+  {
+   "clip_index": 3,
+   "candidate_id": null,
+   "filename": null,
+   "start": 76.5,
+   "end": 94.5,
+   "duration": 18.0,
+   "pre_extension_end": 91.5,
+   "transcript_preview": "",
+   "viral_score": 79,
+   "raw_score": 0,
+   "end_score": 0,
+   "selection_explanation": {
+    "rank": 3,
+    "total_candidates_considered": 0,
+    "reason": "Rank #4 non-overlapping candidate by score",
+    "key_strengths": [],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [],
+   "end_reasoning": [
+    "Extended from 91.5s → 94.5s to reach sentence boundary"
+   ],
+   "from_fallback": true,
+   "duplicated": false
+  },
+  {
+   "clip_index": 4,
+   "candidate_id": null,
+   "filename": null,
+   "start": 100.5,
+   "end": 118.5,
+   "duration": 18.0,
+   "pre_extension_end": 115.5,
+   "transcript_preview": "",
+   "viral_score": 78,
+   "raw_score": 0,
+   "end_score": 0,
+   "selection_explanation": {
+    "rank": 4,
+    "total_candidates_considered": 0,
+    "reason": "Rank #5 non-overlapping candidate by score",
+    "key_strengths": [],
+    "next_best_alternative": null
+   },
+   "start_reasoning": [],
+   "end_reasoning": [
+    "Extended from 115.5s → 118.5s to reach sentence boundary"
+   ],
+   "from_fallback": true,
+   "duplicated": false
+  }
+ ],
+ "decision_log": [
+  {
+   "step": 1,
+   "event": "sliding_window_scan",
+   "detail": "Scanned 22 windows (step=5.0s), produced 0 raw candidates"
+  },
+  {
+   "step": 2,
+   "event": "filter_results",
+   "detail": "22 filtered out (22 no_stopping_point, 0 no_speech, 0 failed_energy_filter)"
+  },
+  {
+   "step": 3,
+   "event": "dedup",
+   "detail": "0 raw → 0 unique (start,end) positions (kept best score per position)"
+  },
+  {
+   "step": 4,
+   "event": "rank_and_select",
+   "detail": "Sorted 0 candidates by score descending. Selected top 0 non-overlapping."
+  },
+  {
+   "step": 5,
+   "event": "fallback",
+   "detail": "5 clip(s) filled from uniform fallback"
+  },
+  {
+   "step": 6,
+   "event": "end_extension",
+   "detail": "Applied _align_end: clip [4.5s] extended 19.5s → 22.5s; clip [28.5s] extended 43.5s → 46.5s; clip [52.5s] extended 67.5s → 70.5s; clip [76.5s] extended 91.5s → 94.5s; clip [100.5s] extended 115.5s → 118.5s"
+  },
+  {
+   "step": 7,
+   "event": "overlap_clamp",
+   "detail": "No adjacent clips overlapped after extension"
+  }
+ ],
+ "stats": {
+  "total_windows_evaluated": 22,
+  "total_candidates": 0,
+  "unique_after_dedup": 0,
+  "selected": 0,
+  "rejected": 0,
+  "from_fallback": 5,
+  "duplicated": 0,
+  "rejection_breakdown": {},
+  "filter_breakdown": {
+   "no_stopping_point": 22
+  },
+  "duration": {
+   "min": null,
+   "max": null,
+   "mean": null,
+   "distribution": [
+    {
+     "range": "8-10s",
+     "count": 0
+    },
+    {
+     "range": "10-12s",
+     "count": 0
+    },
+    {
+     "range": "12-14s",
+     "count": 0
+    },
+    {
+     "range": "14-16s",
+     "count": 0
+    },
+    {
+     "range": "16-18s",
+     "count": 0
+    },
+    {
+     "range": "18-20s",
+     "count": 0
+    }
+   ]
+  },
+  "word_density": {
+   "min": null,
+   "max": null,
+   "mean": null
+  },
+  "speech_ratio": {
+   "min": null,
+   "max": null,
+   "mean": null
+  },
+  "stop_scores": {
+   "min": null,
+   "max": null,
+   "mean": null
+  }
+ },
+ "counts": {
+  "transcript_segments": 0,
+  "candidates": 0,
+  "filtered_windows": 22
+ },
+ "candidates_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+ "filtered_windows_sha256": "11875a42d284aaee553a04d0e47e59dec5a30e37aaed07a7d30aaa12f15594d3",
+ "config": {
+  "min_duration": 8.0,
+  "pref_min_duration": 12.0,
+  "pref_max_duration": 15.0,
+  "max_duration": 20.0,
+  "pause_threshold": 0.8,
+  "buffer": 3.0,
+  "min_start": 5.0,
+  "step": 5.0,
+  "energy_ratio_threshold": 0.6,
+  "max_clips": 5
+ },
+ "algorithm_version": "adaptive_v2"
+}
