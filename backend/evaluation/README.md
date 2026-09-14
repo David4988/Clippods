@@ -33,6 +33,13 @@ apply here (decision D14).
 | `hash <media>` | sha256 for pinning media in a manifest |
 | `promote <run_id>` | Copy a finished run's small JSON into git-tracked `evaluation/results/` |
 | `where` | Print data directories |
+| `dataset add --manifest M --media FILE --id ID --languages ta[,en] [--tags …] [--speakers N] [--source-url URL] [--notes TEXT] [--copy]` | Hash + probe a media file and append it to an unfrozen manifest |
+| `dataset label-template --manifest M --item ID` | Create `labels/<ID>.json` from the draft label schema (never overwrites) |
+| `dataset check M [--for-freeze] [--skip-hashes]` | Validate manifest, media hashes, labels and composition coverage |
+| `dataset freeze M --by NAME` | Strict check, pin label hashes, set `frozen: true` (product owner only) |
+
+Dataset preparation steps and the label schema are documented in
+`datasets/clippods-eval/v1/README.md`.
 
 Engine specs are `<engine>@<clip_count>`. Available now: `legacy_v2` (the
 production `select_segments`, unchanged). Default: `legacy_v2@3` (historical)
