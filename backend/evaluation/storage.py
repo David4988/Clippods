@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -45,23 +44,9 @@ def runs_dir() -> Path:
 
 
 def write_json(path: Path, data: Any) -> Path:
-    """
-    UTF-8, atomic JSON write. The temp file is created in the destination
-    directory so os.replace is a same-volume rename (atomic on Windows and POSIX).
-    Explicit encoding matters: the Windows default codec here is cp1252, which
-    cannot encode Hindi, Tamil or the arrows in legacy analysis traces.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, ensure_ascii=False, indent=2)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(payload)
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return path
+    """UTF-8, atomic JSON write (shared with the production pipeline)."""
+    from utils import write_json_atomic
+    return write_json_atomic(path, data)
 
 
 def read_json(path: Path) -> Any:

@@ -86,9 +86,9 @@ SaaS_Hackathon/
 ### Prerequisites
 
 - **Python 3.12 or 3.13.** Not 3.14 — the `av` dependency (pulled in by
-  `faster-whisper`) has no wheels for 3.14 and fails to build from source. A 3.14
-  environment installs *without* `faster-whisper`, and transcription then silently
-  degrades to a stub transcript instead of failing.
+  `faster-whisper`) has no wheels for 3.14 and fails to build from source. Without
+  `faster-whisper`, every job fails at the transcription step with
+  "Transcription is unavailable".
 - **Node.js 18+** and **npm** (only needed for the Algorithm Debugger dashboard)
 - **FFmpeg** — `ffmpeg` and `ffprobe` on `PATH`
 - **cloudflared** — the tunnel is already configured in `~/.cloudflared/config.yml`
@@ -104,6 +104,9 @@ cd SaaS_Hackathon
 ### 2. Backend Setup
 
 The virtual environment lives at the **repository root**, not inside `backend/`.
+`.venv312` is the development environment: run the server, tests and the
+evaluation harness with its interpreter. `backend/requirements.lock.txt` pins the
+exact versions (including the ASR stack), so transcripts are reproducible.
 
 **macOS / Linux:**
 
@@ -112,7 +115,7 @@ The virtual environment lives at the **repository root**, not inside `backend/`.
 python3.12 -m venv .venv312
 source .venv312/bin/activate
 
-pip install -r backend/requirements.txt
+pip install -r backend/requirements.txt -c backend/requirements.lock.txt
 ```
 
 **Windows (PowerShell):**
@@ -122,7 +125,7 @@ pip install -r backend/requirements.txt
 py -3.12 -m venv .venv312
 .\.venv312\Scripts\Activate.ps1
 
-pip install -r backend\requirements.txt
+pip install -r backend\requirements.txt -c backend\requirements.lock.txt
 ```
 
 > If `py -3.12` isn't found, install Python 3.12 or 3.13 from python.org
@@ -137,7 +140,7 @@ pip install -r backend\requirements.txt
 > in that terminal session and retry.
 
 Verify that transcription is actually available before demoing — this must print
-`ok`, otherwise clips are cut from a stub transcript:
+`ok`, otherwise every job fails at transcription:
 
 ```bash
 # macOS/Linux
@@ -152,8 +155,9 @@ Verify that transcription is actually available before demoing — this must pri
 ### 3. Environment Variables
 
 All settings have working defaults — **no `.env` file is required to run the app.**
-`SARVAM_API_KEY` in `backend/.env.example` is a leftover: no code reads it, and
-transcription runs locally on Faster-Whisper.
+Settings are read from real environment variables and from `backend/.env`
+(real environment variables win). `SARVAM_API_KEY` in `backend/.env.example` is a
+leftover: no code reads it, and transcription runs locally on Faster-Whisper.
 
 ```bash
 cp backend/.env.example backend/.env   # optional
@@ -168,6 +172,12 @@ cp backend/.env.example backend/.env   # optional
 | `MAX_UPLOAD_SIZE_MB`       | Max upload file size (MB)          | `100`         |
 | `FFMPEG_TIMEOUT_SECONDS`   | FFmpeg subprocess timeout          | `300`         |
 | `YT_DLP_TIMEOUT_SECONDS`   | yt-dlp download timeout            | `600`         |
+| `MAX_VIDEO_DURATION_SECONDS` | Longest accepted video (seconds) | `7200`        |
+| `TEMP_FILE_MAX_AGE_HOURS`  | Temp file age before cleanup (files of running jobs are never removed) | `4` |
+| `OUTPUT_DIR_MAX_AGE_HOURS` | Output run folder age before cleanup | `24`        |
+| `DEBUG_RUN_MAX_AGE_HOURS`  | With `ENABLE_DEBUGGER=true`: age before runs with `analysis.json` are removed (`0` = keep) | `0` |
+| `JOB_RECORD_TTL_HOURS`     | How long finished jobs stay queryable via `/status` | `24` |
+| `CLIPPODS_EVAL_DIR`        | Offline evaluation data directory  | `<repo>/eval_data` |
 
 ### 4. Dashboard Setup
 
@@ -245,14 +255,21 @@ Start the backend with `ENABLE_DEBUGGER=true` if you want it to return data.
 
 ## 📡 API Endpoints
 
-| Method   | Endpoint                 | Description                          |
-| -------- | ------------------------ | ------------------------------------ |
-| `POST`   | `/api/process-url`       | Submit a YouTube URL for processing  |
-| `POST`   | `/api/upload`            | Upload a video file for processing   |
-| `GET`    | `/api/status/{job_id}`   | Poll job status and progress         |
-| `POST`   | `/api/cancel/{job_id}`   | Cancel an in-progress job            |
-| `GET`    | `/api/clips/{filename}`  | Download a generated clip            |
-| `GET`    | `/api/analysis/{job_id}` | Retrieve algorithm debugger data     |
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| `POST` | `/process` | Submit a video URL. JSON body `{"video_url": "..."}` → `202 {"job_id"}` |
+| `POST` | `/process/upload` | Upload a video file (multipart field `file`) → `202 {"job_id"}` |
+| `GET`  | `/status/{job_id}` | Job status, progress, clips, error and `warnings` |
+| `POST` | `/cancel/{job_id}` | Cancel a queued or running job |
+| `GET`  | `/clips/{filename}` | Download a generated clip |
+| `GET`  | `/health` | Health check |
+| `GET`  | `/dev/analysis/jobs` | Debugger: list runs with `analysis.json` (403 unless `ENABLE_DEBUGGER=true`) |
+| `GET`  | `/dev/analysis/{run_uuid}` | Debugger: full analysis for a run (`run_uuid` is on the job record) |
+| `GET`  | `/dev/analysis/{run_uuid}/summary` | Debugger: meta and stats only |
+| `GET`  | `/dev/video/{run_uuid}` | Debugger: original video (requires `KEEP_ORIGINAL_FOR_DEBUG=true`) |
+
+Errors are returned as `{"error": "..."}`. Failed and cancelled runs also write an
+`analysis.json` recording the stage that stopped and why.
 
 ---
 
@@ -260,8 +277,17 @@ Start the backend with `ENABLE_DEBUGGER=true` if you want it to return data.
 
 ```bash
 cd backend
-pytest
+../.venv312/bin/python -m pytest          # Windows: ..\.venv312\Scripts\python.exe -m pytest
 ```
+
+Tests never write to `backend/temp` or `backend/outputs`; the run fails if they do.
+Legacy clip-selection behaviour is pinned by golden files in `backend/tests/legacy/`.
+
+## 📏 Offline Evaluation
+
+`backend/evaluation/` runs the pipeline on local files of any size, caches the
+expensive stages and writes comparable run artifacts. See
+[backend/evaluation/README.md](backend/evaluation/README.md).
 
 ---
 

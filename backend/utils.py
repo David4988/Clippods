@@ -1,12 +1,38 @@
 """
 utils.py — Shared helper functions for the pipeline.
 """
+import json
 import os
 import uuid
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from config import TEMP_DIR
+
+
+def write_json_atomic(path: Path | str, data: Any) -> Path:
+    """
+    Write *data* as UTF-8 JSON, atomically.
+
+    The encoding must be explicit: on Windows the default text codec is the
+    locale code page (cp1252 here), which cannot encode Hindi, Tamil or the
+    arrows the selection trace contains, and a failed write used to leave a
+    0-byte analysis.json. The temp file lives in the destination directory so
+    os.replace is a same-volume rename, atomic on Windows and POSIX.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(payload)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return path
 
 
 def get_temp_path(suffix: str = "") -> Path:
@@ -95,28 +121,33 @@ def run_garbage_collection() -> None:
     import time
     import shutil
     import logging
-    from config import (
-        TEMP_DIR,
-        OUTPUTS_DIR,
-        TEMP_FILE_MAX_AGE_HOURS,
-        OUTPUT_DIR_MAX_AGE_HOURS
-    )
+    import config
+    from job_manager import active_temp_stems, evict_expired_jobs
 
     gc_logger = logging.getLogger("garbage_collector")
     gc_logger.info("Starting garbage collection sweep...")
 
     now = time.time()
-    temp_max_age_sec = TEMP_FILE_MAX_AGE_HOURS * 3600
-    outputs_max_age_sec = OUTPUT_DIR_MAX_AGE_HOURS * 3600
+    temp_max_age_sec = config.TEMP_FILE_MAX_AGE_HOURS * 3600
+    outputs_max_age_sec = config.OUTPUT_DIR_MAX_AGE_HOURS * 3600
+    debug_max_age_sec = config.DEBUG_RUN_MAX_AGE_HOURS * 3600
+
+    # Files registered to a job that has not finished are never old enough to
+    # delete, however long ASR has been running on them.
+    protected_stems = active_temp_stems()
 
     # 1. Clean expired temp files
     temp_deleted = 0
-    if TEMP_DIR.exists():
-        for item in TEMP_DIR.iterdir():
+    temp_protected = 0
+    if config.TEMP_DIR.exists():
+        for item in config.TEMP_DIR.iterdir():
             if item.is_file():
                 try:
                     mtime = item.stat().st_mtime
                     if now - mtime > temp_max_age_sec:
+                        if item.name.split(".")[0] in protected_stems:
+                            temp_protected += 1
+                            continue
                         item.unlink()
                         temp_deleted += 1
                 except Exception as e:
@@ -124,20 +155,33 @@ def run_garbage_collection() -> None:
 
     # 2. Clean expired output run folders
     outputs_deleted = 0
-    if OUTPUTS_DIR.exists():
-        for run_dir in OUTPUTS_DIR.iterdir():
+    debug_runs_kept = 0
+    if config.OUTPUTS_DIR.exists():
+        for run_dir in config.OUTPUTS_DIR.iterdir():
             if run_dir.is_dir():
                 try:
+                    is_debug_run = config.ENABLE_DEBUGGER and (run_dir / "analysis.json").exists()
+                    max_age = debug_max_age_sec if is_debug_run else outputs_max_age_sec
+                    if is_debug_run and max_age <= 0:
+                        debug_runs_kept += 1
+                        continue
                     mtime = run_dir.stat().st_mtime
-                    if now - mtime > outputs_max_age_sec:
+                    if now - mtime > max_age:
                         shutil.rmtree(run_dir)
                         outputs_deleted += 1
                 except Exception as e:
                     gc_logger.warning("Failed to delete output dir %s: %s", run_dir, e)
 
+    # 3. Evict finished job records from memory
+    jobs_evicted = evict_expired_jobs(config.JOB_RECORD_TTL_HOURS * 3600, now=now)
+
     gc_logger.info(
-        "Garbage collection sweep completed. Deleted %d temp files, %d outputs run folders.",
+        "Garbage collection sweep completed. Deleted %d temp files (%d protected by active jobs), "
+        "%d output run folders (%d debug runs retained), evicted %d job records.",
         temp_deleted,
-        outputs_deleted
+        temp_protected,
+        outputs_deleted,
+        debug_runs_kept,
+        jobs_evicted,
     )
 

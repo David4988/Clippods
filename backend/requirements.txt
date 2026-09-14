@@ -8,9 +8,13 @@ ffmpeg-python==0.2.0
 # Re-run `pip install -U yt-dlp` before any demo.
 yt-dlp>=2026.8.19
 
-faster-whisper
-ctranslate2
-av
+# ASR stack pinned: a different faster-whisper/ctranslate2/av can change
+# transcripts, which silently invalidates evaluation baselines. Change these
+# only as a measured ASR experiment. Exact transitive versions:
+# requirements.lock.txt (install with -c requirements.lock.txt).
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+av==18.1.0
 
 httpx==0.28.1
 httptools==0.8.0

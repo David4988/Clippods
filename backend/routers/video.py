@@ -14,11 +14,24 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
+import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from job_manager import create_job, update_job, get_job, cancel_job, is_job_cancelled
+import config
+from job_manager import (
+    add_job_warning,
+    cancel_job,
+    create_job,
+    get_job,
+    is_job_cancelled,
+    register_job_path,
+    release_job_paths,
+    update_job,
+)
 from services.job_worker import worker_pool
 
 import ffmpeg as ffmpeg_lib
@@ -31,7 +44,7 @@ from services.clip_generation import generate_clips
 from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
 from services.transcription import transcribe
-from utils import cleanup_file, cleanup_temp_artifacts
+from utils import cleanup_file, cleanup_temp_artifacts, write_json_atomic
 from config import KEEP_ORIGINAL_FOR_DEBUG
 
 logger = logging.getLogger(__name__)
@@ -49,6 +62,49 @@ class VideoUrlRequest(BaseModel):
 # Pipeline Orchestrator (shared by both routes)
 # ---------------------------------------------------------------------------
 
+class _PipelineTrace:
+    """
+    Per-run record of which stages ran, how long each took, and where a run
+    stopped. Stored in analysis.json under "pipeline" for completed, failed and
+    cancelled runs alike.
+    """
+
+    def __init__(self, job_id: Optional[str], video_url: Optional[str]):
+        self.job_id = job_id
+        self.video_url = video_url
+        self.stages: list[dict] = []
+        self.failed_stage: Optional[str] = None
+        self._t0 = time.perf_counter()
+
+    @contextmanager
+    def stage(self, name: str):
+        started = time.perf_counter()
+        entry = {"stage": name, "wall_s": None, "ok": False}
+        self.stages.append(entry)
+        try:
+            yield
+            entry["ok"] = True
+        except BaseException:
+            self.failed_stage = name
+            raise
+        finally:
+            entry["wall_s"] = round(time.perf_counter() - started, 3)
+
+    def as_dict(self, status: str, error: Optional[str] = None) -> dict:
+        return {
+            "status": status,
+            "error": error,
+            "failed_stage": self.failed_stage,
+            "stages": self.stages,
+            "total_wall_s": round(time.perf_counter() - self._t0, 3),
+        }
+
+
+def _raise_if_cancelled(job_id: Optional[str]) -> None:
+    if is_job_cancelled(job_id):
+        raise HTTPException(status_code=499, detail="Job cancelled by user.")
+
+
 async def _run_pipeline(
     video_url: Optional[str],
     video_path: Optional[Path] = None,
@@ -59,13 +115,17 @@ async def _run_pipeline(
 
     Returns basenames ["clip_0.mp4", "clip_1.mp4", "clip_2.mp4"].
     Temp files are always cleaned up, even on failure.
-    Also generates analysis.json for the Algorithm Debugger.
+    Writes analysis.json for the Algorithm Debugger for completed runs, and a
+    failure record (with stage timings and the error) for failed or cancelled runs.
     """
+    trace = _PipelineTrace(job_id, video_url)
     audio_path: Optional[str] = None
+    video_duration: Optional[float] = None
+    segments: Optional[list] = None
+    clip_paths: list[str] = []
+    register_job_path(job_id, video_path)
     try:
-        # Check cancellation before starting
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        _raise_if_cancelled(job_id)
 
         # Task 1: get_video_input
         if video_path is not None:
@@ -74,11 +134,11 @@ async def _run_pipeline(
             logger.info("Pipeline: downloading video from URL")
             if job_id is not None:
                 update_job(job_id, status="downloading", progress=5, message="Downloading video...")
-            video_path = await get_video_input(video_url, None, job_id=job_id)
+            with trace.stage("download"):
+                video_path = await get_video_input(video_url, None, job_id=job_id)
+            register_job_path(job_id, video_path)
 
-        # Check cancellation after download/input saving
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        _raise_if_cancelled(job_id)
 
         # Uploads jump straight from 5% to 40% with a long silent gap while
         # ffprobe + audio extraction run. Report the analysis step so the UI has
@@ -86,110 +146,103 @@ async def _run_pipeline(
         if job_id is not None:
             update_job(job_id, status="extracting_audio", progress=20, message="Analyzing video...")
 
-        # Duration guard (max 2 hours)
-        try:
-            probe = ffmpeg_lib.probe(str(video_path))
-            video_duration = float(probe["format"]["duration"])
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Could not read video duration: {exc}") from exc
-        MAX_DURATION = 120 * 60
-        if video_duration > MAX_DURATION:
-            raise HTTPException(status_code=400, detail="Video too long (max 2 hours)")
+        # Duration guard
+        with trace.stage("probe"):
+            try:
+                probe = ffmpeg_lib.probe(str(video_path))
+                video_duration = float(probe["format"]["duration"])
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Could not read video duration: {exc}") from exc
+            max_duration = config.MAX_VIDEO_DURATION_SECONDS
+            if video_duration > max_duration:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Video too long (max {_format_limit(max_duration)})",
+                )
         logger.info("Pipeline: video duration %.1fs — within limit", video_duration)
 
         # Task 2: extract_audio
         logger.info("Pipeline: extracting audio from %s", video_path)
         if job_id is not None:
             update_job(job_id, status="extracting_audio", progress=40, message="Extracting audio...")
-        
+
         # Pass job_id so FFmpeg subprocess is registered and can be cancelled
-        audio_path = await asyncio.to_thread(extract_audio, str(video_path), job_id)
+        with trace.stage("extract_audio"):
+            audio_path = await asyncio.to_thread(extract_audio, str(video_path), job_id)
+        register_job_path(job_id, audio_path)
 
-        # Check cancellation after audio extraction
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        _raise_if_cancelled(job_id)
 
-        # Task 3: transcribe
+        # Task 3: transcribe (reports progress and honours cancellation per segment)
         logger.info("Pipeline: transcribing audio")
         if job_id is not None:
             update_job(job_id, status="transcribing", progress=60, message="Transcribing audio...")
-        transcript = await asyncio.to_thread(transcribe, audio_path)
+        with trace.stage("transcribe"):
+            transcript = await asyncio.to_thread(transcribe, audio_path, job_id)
         segments = transcript["segments"]
 
-        # Check cancellation after transcription
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        _raise_if_cancelled(job_id)
 
         # Task 4: select_segments (with analysis collection)
         logger.info("Pipeline: selecting segments (video_duration=%.2fs)", video_duration)
         if job_id is not None:
             update_job(job_id, status="selecting_segments", progress=75, message="Selecting highlights...")
 
-        result = select_segments(segments, video_duration, collect_analysis=True)
+        with trace.stage("select_segments"):
+            result = select_segments(segments, video_duration, collect_analysis=True)
         if isinstance(result, tuple):
             selected, analysis_data = result
         else:
             selected = result
             analysis_data = None
 
-        # Check cancellation after segment selection
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        _raise_if_cancelled(job_id)
 
         # Task 5: generate_clips
         logger.info("Pipeline: generating %d clips", len(selected))
         if job_id is not None:
             update_job(job_id, status="generating_clips", progress=80, message="Generating clips...")
-        
-        # Pass job_id so FFmpeg cutting subprocesses can be cancelled
-        clip_paths = await asyncio.to_thread(generate_clips, str(video_path), selected, job_id)
 
-        # Check cancellation after clip generation
-        if is_job_cancelled(job_id):
-            raise HTTPException(status_code=499, detail="Job cancelled by user.")
+        # Pass job_id so FFmpeg cutting subprocesses can be cancelled
+        with trace.stage("generate_clips"):
+            clip_paths = await asyncio.to_thread(generate_clips, str(video_path), selected, job_id)
+
+        _raise_if_cancelled(job_id)
 
         # --- Save analysis.json alongside clips ---
-        if analysis_data is not None and clip_paths:
-            try:
-                import json
-                import shutil
+        if clip_paths:
+            clip_dir = Path(clip_paths[0]).parent
+            run_uuid = clip_dir.name
+            if job_id is not None:
+                update_job(job_id, run_uuid=run_uuid)
 
-                clip_dir = Path(clip_paths[0]).parent
-                run_uuid = clip_dir.name
+            if analysis_data is not None:
+                try:
+                    _enrich_meta(analysis_data, job_id, run_uuid, video_url, video_path)
 
-                # Enrich metadata
-                analysis_data["meta"]["job_id"] = job_id
-                analysis_data["meta"]["run_uuid"] = run_uuid
-                analysis_data["meta"]["source"] = "youtube" if video_url else "upload"
-                analysis_data["meta"]["source_url"] = video_url
-                analysis_data["meta"]["filename"] = Path(str(video_path)).name
+                    # Enrich final clips with filenames
+                    for i, fc in enumerate(analysis_data.get("final_clips", [])):
+                        if i < len(clip_paths):
+                            fc["filename"] = Path(clip_paths[i]).name
 
-                # Enrich final clips with filenames
-                for i, fc in enumerate(analysis_data.get("final_clips", [])):
-                    if i < len(clip_paths):
-                        fc["filename"] = Path(clip_paths[i]).name
+                    # Writing the record is not itself a traced stage: the
+                    # record would always show it as unfinished.
+                    analysis_data["pipeline"] = trace.as_dict("completed")
+                    analysis_path = write_json_atomic(clip_dir / "analysis.json", analysis_data)
+                    logger.info("Pipeline: saved analysis.json to %s", analysis_path)
 
-                # Write analysis.json
-                analysis_path = clip_dir / "analysis.json"
-                analysis_path.write_text(
-                    json.dumps(analysis_data, indent=2, ensure_ascii=False)
-                )
-                logger.info("Pipeline: saved analysis.json to %s", analysis_path)
-
-                # Copy original video for debugger playback (based on config)
-                if KEEP_ORIGINAL_FOR_DEBUG and video_path is not None:
-                    ext = Path(str(video_path)).suffix or ".mp4"
-                    original_dest = clip_dir / f"original{ext}"
-                    shutil.copy2(str(video_path), str(original_dest))
-                    logger.info("Pipeline: copied original video for debugger to %s", original_dest)
-
-                # Store run_uuid in job for API lookup
-                if job_id is not None:
-                    update_job(job_id, run_uuid=run_uuid)
-
-            except Exception as exc:
-                # Analysis saving is non-critical — don't fail the pipeline
-                logger.warning("Pipeline: failed to save analysis.json: %s", exc)
+                    # Copy original video for debugger playback (based on config)
+                    if KEEP_ORIGINAL_FOR_DEBUG and video_path is not None:
+                        ext = Path(str(video_path)).suffix or ".mp4"
+                        original_dest = clip_dir / f"original{ext}"
+                        shutil.copy2(str(video_path), str(original_dest))
+                        logger.info("Pipeline: copied original video for debugger to %s", original_dest)
+                except Exception as exc:
+                    # Non-critical for the user's clips, but never silent: the
+                    # job carries a warning and the log has the traceback.
+                    logger.exception("Pipeline: failed to save analysis.json")
+                    if job_id is not None:
+                        add_job_warning(job_id, f"Debugger analysis was not saved: {type(exc).__name__}: {exc}")
 
         # Build rich metadata clip list
         rich_clips = []
@@ -202,7 +255,19 @@ async def _run_pipeline(
                 "duration": round(seg["end"] - seg["start"], 1)
             })
         return rich_clips
+    except BaseException as exc:
+        cancelled = is_job_cancelled(job_id) or (isinstance(exc, HTTPException) and exc.status_code == 499)
+        if clip_paths:
+            # Clips rendered for a run that then failed or was cancelled are
+            # never delivered; don't leave them for the GC.
+            shutil.rmtree(Path(clip_paths[0]).parent, ignore_errors=True)
+        _save_failure_analysis(
+            trace, "cancelled" if cancelled else "error", _job_error_message(exc),
+            job_id, video_url, video_path, video_duration, segments,
+        )
+        raise
     finally:
+        release_job_paths(job_id)
         if video_path is not None:
             # Also removes yt-dlp's leftover .part fragments for this download.
             cleanup_temp_artifacts(video_path)
@@ -210,6 +275,54 @@ async def _run_pipeline(
         if audio_path is not None:
             cleanup_file(audio_path)
             logger.info("Cleaned up audio temp: %s", audio_path)
+
+
+def _format_limit(seconds: float) -> str:
+    if seconds % 3600 == 0:
+        hours = int(seconds // 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''}"
+    minutes = int(seconds // 60)
+    return f"{minutes} minute{'s' if minutes != 1 else ''}"
+
+
+def _enrich_meta(analysis: dict, job_id, run_uuid, video_url, video_path) -> None:
+    meta = analysis.setdefault("meta", {})
+    meta["job_id"] = job_id
+    meta["run_uuid"] = run_uuid
+    meta["source"] = "youtube" if video_url else "upload"
+    meta["source_url"] = video_url
+    meta["filename"] = Path(str(video_path)).name if video_path is not None else None
+
+
+def _save_failure_analysis(trace: _PipelineTrace, status: str, error: str, job_id, video_url,
+                           video_path, video_duration, segments) -> None:
+    """
+    Write an analysis.json for a run that did not complete, so the debugger can
+    show where and why it stopped. Same top-level shape as a completed run
+    (empty candidates/clips) plus the "pipeline" record.
+    """
+    if job_id is None:
+        return
+    try:
+        from services.analysis_collector import AnalysisCollector
+        from services.analysis_constants import ALGORITHM_VERSION, ANALYSIS_SCHEMA_VERSION
+
+        run_uuid = uuid.uuid4().hex
+        collector = AnalysisCollector(
+            video_duration=video_duration or 0.0,
+            config={},
+            transcript=segments or [],
+            algorithm_version=ALGORITHM_VERSION,
+            schema_version=ANALYSIS_SCHEMA_VERSION,
+        )
+        analysis = collector.to_dict()
+        _enrich_meta(analysis, job_id, run_uuid, video_url, video_path)
+        analysis["pipeline"] = trace.as_dict(status, error)
+        write_json_atomic(config.OUTPUTS_DIR / run_uuid / "analysis.json", analysis)
+        update_job(job_id, run_uuid=run_uuid)
+    except Exception:
+        # Must never mask the original pipeline error.
+        logger.exception("Pipeline: failed to save failure analysis for job %s", job_id)
 
 def _job_error_message(exc: BaseException) -> str:
     """

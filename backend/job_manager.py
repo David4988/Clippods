@@ -14,6 +14,13 @@ _jobs_lock = threading.Lock()
 _active_processes: Dict[str, Any] = {}
 _processes_lock = threading.Lock()
 
+TERMINAL_STATUSES = ("completed", "error", "cancelled")
+
+# Temp files owned by jobs, keyed by job id. The garbage collector must not
+# delete these while the job is still running (a long transcription can outlive
+# the temp-file age limit).
+_job_paths: Dict[str, set] = {}
+
 # Global cancelled set (to check cancellations fast without locks where possible, or just lock)
 def create_job() -> str:
     """Create a new job entry and return its ID."""
@@ -29,7 +36,9 @@ def create_job() -> str:
             "eta": None,
             "clips": None,
             "error": None,
-            "run_uuid": None
+            "run_uuid": None,
+            "warnings": [],
+            "finished_at": None,
         }
     return job_id
 
@@ -53,12 +62,17 @@ def update_job(
         
         # Prevent updates to cancelled jobs, except final error/cleanup
         if job.get("status") == "cancelled" and status not in ("completed", "error"):
+            # Progress updates from a still-winding-down pipeline are dropped,
+            # but the link to the run's analysis record must still be stored.
+            if run_uuid is not _SENTINEL:
+                job["run_uuid"] = run_uuid
             return
 
         if status is not _SENTINEL:
             job["status"] = status
-            if status in ("completed", "error", "cancelled"):
+            if status in TERMINAL_STATUSES:
                 job["elapsed_seconds"] = int(time.time() - job["start_time"])
+                job["finished_at"] = time.time()
         if progress is not _SENTINEL:
             job["progress"] = progress
         if message is not _SENTINEL:
@@ -106,9 +120,65 @@ def get_job(job_id: str) -> Optional[Dict[str, Optional[object]]]:
             job_copy["queue_position"] = None
             job_copy["estimated_wait_seconds"] = None
 
-        # Do not expose start_time in the JSON response
+        # Do not expose internal timestamps in the JSON response
         job_copy.pop("start_time", None)
+        job_copy.pop("finished_at", None)
+        job_copy["warnings"] = list(job_copy.get("warnings") or [])
         return job_copy
+
+
+def add_job_warning(job_id: str, warning: str) -> None:
+    """Record a non-fatal problem (e.g. debugger artifact not saved) on the job."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is not None:
+            job.setdefault("warnings", []).append(warning)
+
+
+def evict_expired_jobs(ttl_seconds: float, now: float | None = None) -> int:
+    """Drop finished job records older than ttl_seconds. Returns the count removed."""
+    now = time.time() if now is None else now
+    with _jobs_lock:
+        expired = [
+            jid for jid, job in _jobs.items()
+            if job.get("status") in TERMINAL_STATUSES
+            and job.get("finished_at") is not None
+            and now - job["finished_at"] > ttl_seconds
+        ]
+        for jid in expired:
+            del _jobs[jid]
+            _job_paths.pop(jid, None)
+    return len(expired)
+
+
+# ---------------------------------------------------------------------------
+# Temp file ownership (protects running jobs from the garbage collector)
+# ---------------------------------------------------------------------------
+
+def register_job_path(job_id: str | None, path: Any) -> None:
+    if not job_id or path is None:
+        return
+    from pathlib import Path
+    with _jobs_lock:
+        _job_paths.setdefault(job_id, set()).add(Path(str(path)).name.split(".")[0])
+
+
+def release_job_paths(job_id: str | None) -> None:
+    if not job_id:
+        return
+    with _jobs_lock:
+        _job_paths.pop(job_id, None)
+
+
+def active_temp_stems() -> set:
+    """File-name stems registered to jobs that have not reached a terminal state."""
+    with _jobs_lock:
+        stems = set()
+        for jid, job_stems in _job_paths.items():
+            job = _jobs.get(jid)
+            if job is not None and job.get("status") not in TERMINAL_STATUSES:
+                stems |= job_stems
+        return stems
 
 # ---------------------------------------------------------------------------
 # Subprocess Tracking (Milestone 8)
@@ -143,6 +213,7 @@ def cancel_job(job_id: str) -> bool:
         
         cancellable_states = {
             "queued",
+            "processing",
             "downloading",
             "extracting_audio",
             "transcribing",
@@ -156,6 +227,7 @@ def cancel_job(job_id: str) -> bool:
         job["message"] = "Job cancelled by user."
         job["error"] = "Job cancelled by user."
         job["elapsed_seconds"] = int(time.time() - job["start_time"])
+        job["finished_at"] = time.time()
 
     # 2. Terminate the active subprocess
     with _processes_lock:

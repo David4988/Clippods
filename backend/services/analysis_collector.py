@@ -6,7 +6,6 @@ Pure data container with zero external dependencies (no FastAPI, no FFmpeg).
 """
 from __future__ import annotations
 
-import json
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
@@ -390,7 +389,5 @@ class AnalysisCollector:
 
     def save(self, output_dir: Path) -> Path:
         """Write analysis.json to *output_dir*. Returns the file path."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / "analysis.json"
-        path.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
-        return path
+        from utils import write_json_atomic
+        return write_json_atomic(Path(output_dir) / "analysis.json", self.to_dict())

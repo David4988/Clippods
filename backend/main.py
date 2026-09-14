@@ -4,22 +4,21 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Add the backend directory to sys.path so imports work on Vercel
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+# config loads backend/.env itself, before any setting is read.
 from config import ENABLE_DEBUGGER, CLEANUP_INTERVAL_SECONDS, OUTPUTS_DIR
 from services.job_worker import worker_pool
 from utils import run_garbage_collection
-
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -28,7 +27,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SaaS Hackathon API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global _gc_thread
+    # 1. Start job worker pool
+    worker_pool.start()
+
+    # 2. Start GC background daemon thread
+    _gc_stop_event.clear()
+    _gc_thread = threading.Thread(target=_gc_worker_loop, name="ClipPodsGCDaemon", daemon=True)
+    _gc_thread.start()
+    try:
+        yield
+    finally:
+        # 1. Stop GC background daemon
+        _gc_stop_event.set()
+        if _gc_thread:
+            _gc_thread.join(timeout=5)
+
+        # 2. Stop job worker pool
+        worker_pool.stop()
+
+
+app = FastAPI(title="SaaS Hackathon API", version="0.1.0", lifespan=lifespan)
 
 # The API uses no cookies or auth headers, so credentials are not needed.
 # allow_origins=["*"] together with allow_credentials=True is an invalid
@@ -61,31 +82,6 @@ def _gc_worker_loop():
         except Exception as exc:
             logger.error("Error during garbage collection sweep: %s", exc)
     logger.info("Garbage collection background daemon stopped.")
-
-# ---------------------------------------------------------------------------
-# Startup / Shutdown Lifecycles
-# ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-async def startup_event():
-    global _gc_thread
-    # 1. Start job worker pool
-    worker_pool.start()
-    
-    # 2. Start GC background daemon thread
-    _gc_stop_event.clear()
-    _gc_thread = threading.Thread(target=_gc_worker_loop, name="ClipPodsGCDaemon", daemon=True)
-    _gc_thread.start()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    # 1. Stop GC background daemon
-    _gc_stop_event.set()
-    if _gc_thread:
-        _gc_thread.join(timeout=5)
-    
-    # 2. Stop job worker pool
-    worker_pool.stop()
 
 # ---------------------------------------------------------------------------
 # Contract-compliant error handler for Pydantic validation failures (422).

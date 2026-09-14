@@ -18,7 +18,11 @@ from pathlib import Path
 
 import pytest
 
-import config
+# A developer's backend/.env (e.g. ENABLE_DEBUGGER=true) must not change test
+# outcomes. Set before `config` is imported anywhere.
+os.environ["CLIPPODS_DISABLE_DOTENV"] = "1"
+
+import config  # noqa: E402
 
 # (module, attribute) pairs that hold a directory captured at import time.
 _DIR_ALIASES = {

@@ -5,8 +5,19 @@ Loads settings from environment variables with sensible defaults for VPS deploym
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Base directories
 BASE_DIR = Path(__file__).parent.resolve()
+
+# Load backend/.env BEFORE any setting below is read. Every module that needs a
+# setting imports this file first, so loading here (rather than in main.py after
+# its imports) is what makes .env values actually take effect. Real environment
+# variables win over .env. CLIPPODS_ENV_FILE points at a different file;
+# CLIPPODS_DISABLE_DOTENV=1 skips loading (used by the test suite for hermeticity).
+if os.environ.get("CLIPPODS_DISABLE_DOTENV") != "1":
+    load_dotenv(os.environ.get("CLIPPODS_ENV_FILE") or BASE_DIR / ".env", override=False)
+
 TEMP_DIR = BASE_DIR / "temp"
 OUTPUTS_DIR = BASE_DIR / "outputs"
 
@@ -58,3 +69,17 @@ YT_DLP_TIMEOUT_SECONDS = int(os.environ.get("YT_DLP_TIMEOUT_SECONDS", "600"))   
 CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", "3600")) # every 1 hour
 TEMP_FILE_MAX_AGE_HOURS = float(os.environ.get("TEMP_FILE_MAX_AGE_HOURS", "4.0"))   # clean temp files older than 4h
 OUTPUT_DIR_MAX_AGE_HOURS = float(os.environ.get("OUTPUT_DIR_MAX_AGE_HOURS", "24.0"))# clean output dirs older than 24h
+
+# When the debugger is enabled, run folders that contain analysis.json are debug
+# evidence and follow this retention instead of OUTPUT_DIR_MAX_AGE_HOURS.
+# 0 = never delete automatically. (Offline evaluation data lives outside
+# backend/ entirely and is never swept.)
+DEBUG_RUN_MAX_AGE_HOURS = float(os.environ.get("DEBUG_RUN_MAX_AGE_HOURS", "0"))
+
+# Finished job records (completed/error/cancelled) are evicted from memory after
+# this long. Matches the default output retention so /status stays useful while
+# the clips still exist.
+JOB_RECORD_TTL_HOURS = float(os.environ.get("JOB_RECORD_TTL_HOURS", "24.0"))
+
+# 6. Input limits
+MAX_VIDEO_DURATION_SECONDS = float(os.environ.get("MAX_VIDEO_DURATION_SECONDS", str(120 * 60)))

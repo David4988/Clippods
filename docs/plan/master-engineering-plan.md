@@ -55,6 +55,11 @@ Observations recorded as they are found. Each entry states its source and its li
 | EV-0.5 | 0 | `select_segments(..., collect_analysis=True)` (the mode the pipeline uses) raises `TypeError` on malformed segments; the existing test only covered `collect_analysis=False`. | `tests/legacy` fixture `malformed_entries_120s` | Real `transcribe()` output never contains these shapes; low practical impact. |
 | EV-0.6 | 0 | Legacy ASR on the synthetic clip ran at RTF ≈ 0.05 with 328 MB peak RSS. | Smoke run `stages.json` | Clean TTS; **not** representative of real podcast latency. |
 | EV-0.7 | 0 | Audio cache costs ≈ 115 MB per hour of media (16 kHz mono PCM). | Arithmetic, confirmed by smoke run file size | Planning estimate for dataset disk usage. |
+| EV-1.1 | 1 | Legacy transcript (sha256 `d171aeff…`), legacy_v2@3/@5 selections, analysis traces and rendered clip durations were **identical** across: Microsoft Store Python (Phase 0), `.venv312` before Phase 1 code, and `.venv312` after Phase 1 code (`--no-cache` rebuilds). | Runs `…112148-e98618`, `…120634-8848b6`, `…121631-45378a` | One synthetic file; complements the 16 golden fixtures, which also pass. |
+| EV-1.2 | 1 | The pytest-only synchronous route bypass reports a cancelled job as `error`; the real threaded worker reports `cancelled`. | `test_late_cancel_removes_rendered_clips_and_records_cancellation` | Test-harness divergence (P-REL-7), not a production bug. |
+| EV-1.3 | 1 | `update_job` dropped **all** updates on cancelled jobs, so a cancelled run could never be linked to its analysis record. Fixed: `run_uuid` is still stored. | Same test | — |
+| EV-1.4 | 1 | Real server run: transcription was 6.2 s of 7.3 s stage time; cancel during transcription stopped the job ~2 s after starting it (previously it ran to completion). | Local uvicorn run, smoke file | Short synthetic file; cancel latency scales with segment length, not file length. |
+| EV-1.5 | 1 | faster-whisper's decoded audio duration (≈ 122 s, "2:02") is shorter than the container duration ffprobe reports (123.36 s). | Progress messages in the real server run | Relevant when clamping cut points to the audio end in boundary work. |
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 

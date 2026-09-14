@@ -81,6 +81,8 @@ def _find_analysis_files() -> list[dict]:
                 "algorithm_version": meta.get("algorithm_version"),
                 "clips_count": len(data.get("final_clips", [])),
                 "candidates_count": stats.get("total_candidates", 0),
+                # Runs written before Phase 1 have no pipeline record.
+                "pipeline_status": (data.get("pipeline") or {}).get("status"),
             })
         except Exception as exc:
             logger.warning("Failed to read analysis.json in %s: %s", run_dir, exc)
@@ -98,7 +100,9 @@ def _load_analysis(run_uuid: str) -> Optional[dict]:
         return None
     try:
         return json.loads(analysis_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        # e.g. a 0-byte file left by the pre-Phase-1 cp1252 write bug
+        logger.warning("Unreadable analysis.json for run %s: %s", run_uuid, exc)
         return None
 
 
