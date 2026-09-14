@@ -14,10 +14,12 @@ ASR profiles (the decode settings are what change transcripts):
            Decodes identically to the pre-contract pipeline, so legacy_v2
            output is unchanged. Speech regions and language probes are measured
            on the side and never feed the decoder.
-  rich_v1  legacy + word timestamps + VAD filter (faster-whisper defaults).
-           Word timestamps move the decoder's seek position, so segment
-           boundaries can differ from `legacy`. Intended for boundary-aware
-           engines.
+  rich_v1  legacy + word timestamps + VAD filter (faster-whisper defaults)
+           + script-aware fallback: for Hindi/Tamil the byte-level
+           compression-ratio fallback trigger is disabled (EV-2.4), while the
+           log-probability fallback stays. Word timestamps move the decoder's
+           seek position, so segment boundaries can differ from `legacy`.
+           Intended for boundary-aware engines.
 
 task is always "transcribe": speech is never translated.
 """
@@ -75,6 +77,10 @@ class AsrProfile:
     # script-biased (EV-2.4), so the fallback can misfire on Tamil.
     temperature: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
     compression_ratio_threshold: Optional[float] = 2.4
+    # When True, the language is resolved before decoding (forced, or detected on
+    # the same audio the decoder sees) and passed explicitly; for languages in
+    # NON_LATIN_SCRIPT_LANGUAGES the compression-ratio fallback trigger is disabled.
+    script_aware_compression: bool = False
     # Measured alongside decoding; never change what the decoder sees.
     speech_regions: bool = True
     language_probes: int = 8                    # 30 s speech windows spread across the file
@@ -82,8 +88,13 @@ class AsrProfile:
 
 PROFILES: dict[str, AsrProfile] = {
     "legacy": AsrProfile(name="legacy"),
-    "rich_v1": AsrProfile(name="rich_v1", word_timestamps=True, vad_filter=True),
+    "rich_v1": AsrProfile(name="rich_v1", word_timestamps=True, vad_filter=True,
+                          script_aware_compression=True),
 }
+
+# Whisper's compression ratio is gzip over UTF-8 bytes; clean text in these
+# scripts already exceeds the 2.4 trigger (EV-2.4), so it misfires as "repetition".
+NON_LATIN_SCRIPT_LANGUAGES = ("hi", "ta")
 
 # What the legacy transcribe() wrapper runs: the legacy decode with nothing extra,
 # so it never needs to decode audio itself.
@@ -211,7 +222,8 @@ def transcribe_rich(
                 ),
             )
 
-        needs_audio = profile.speech_regions or profile.language_probes > 0
+        pre_detect = profile.script_aware_compression and language_mode == "auto"
+        needs_audio = profile.speech_regions or profile.language_probes > 0 or pre_detect
         audio = None
         speech = None
         probes: list[LanguageProbe] = []
@@ -236,19 +248,39 @@ def transcribe_rich(
                 probes = _probe_languages(model, audio, speech, profile.language_probes)
                 timings["language_probes_s"] = round(time.perf_counter() - t0, 3)
 
+            decode_language = None if language_mode == "auto" else language_mode
+            detection = None
+            decode_options = _non_default_decode_options(profile)
+            if profile.script_aware_compression:
+                if pre_detect:
+                    _raise_if_cancelled(job_id)
+                    t0 = time.perf_counter()
+                    # Same audio the decoder will see (VAD-filtered when the profile filters).
+                    detected, probability, all_probs = model.detect_language(
+                        audio=audio,
+                        vad_filter=profile.vad_filter,
+                        vad_parameters=profile.vad_parameters,
+                        language_detection_segments=profile.language_detection_segments,
+                    )
+                    detection = (detected, probability, all_probs)
+                    decode_language = detected
+                    timings["language_detection_s"] = round(time.perf_counter() - t0, 3)
+                if decode_language in NON_LATIN_SCRIPT_LANGUAGES:
+                    decode_options["compression_ratio_threshold"] = None
+
             _raise_if_cancelled(job_id)
             t0 = time.perf_counter()
             segments_generator, info = model.transcribe(
                 audio if audio is not None else str(src),
                 task="transcribe",
-                language=None if language_mode == "auto" else language_mode,
+                language=decode_language,
                 beam_size=profile.beam_size,
                 word_timestamps=profile.word_timestamps,
                 vad_filter=profile.vad_filter,
                 vad_parameters=profile.vad_parameters,
                 condition_on_previous_text=profile.condition_on_previous_text,
                 language_detection_segments=profile.language_detection_segments,
-                **_non_default_decode_options(profile),
+                **decode_options,
             )
             total_duration = getattr(info, "duration", None)
             segments: list[TranscriptSegment] = []
@@ -276,12 +308,16 @@ def transcribe_rich(
         )
 
         forced = language_mode != "auto"
+        if detection is not None:
+            detected_probability, detected_top = detection[1], detection[2]
+        else:
+            detected_probability = getattr(info, "language_probability", None)
+            detected_top = getattr(info, "all_language_probs", None)
         language = LanguageInfo(
             mode=language_mode,
-            language=getattr(info, "language", None) or (language_mode if forced else "unknown"),
-            probability=None if forced else _float(getattr(info, "language_probability", None)),
-            top=[] if forced else [(code, round(float(p), 4)) for code, p in
-                                   (getattr(info, "all_language_probs", None) or [])[:5]],
+            language=getattr(info, "language", None) or decode_language or "unknown",
+            probability=None if forced else _float(detected_probability),
+            top=[] if forced else [(code, round(float(p), 4)) for code, p in (detected_top or [])[:5]],
             probes=probes,
             uncertain=False,
             reasons=[],
@@ -296,7 +332,7 @@ def transcribe_rich(
 
         return Transcript(
             schema=SCHEMA,
-            asr=_asr_record(profile, language_mode, info),
+            asr=_asr_record(profile, language_mode, info, decode_options, detection is not None),
             audio_duration=audio_duration,
             language=language,
             segments=segments,
@@ -351,7 +387,8 @@ def _segment_from(raw, index: int, with_words: bool) -> TranscriptSegment:
     )
 
 
-def _asr_record(profile: AsrProfile, language_mode: str, info) -> dict:
+def _asr_record(profile: AsrProfile, language_mode: str, info, decode_options: dict,
+                pre_detected: bool) -> dict:
     def pkg(name):
         try:
             return version(name)
@@ -371,6 +408,10 @@ def _asr_record(profile: AsrProfile, language_mode: str, info) -> dict:
         "effective_options": _plain(options),
         "effective_vad_options": _plain(vad_options),
         "duration_after_vad": _float(getattr(info, "duration_after_vad", None)),
+        # Options ClipPods passed beyond the fixed ones above (e.g. the script-aware override).
+        "decode_overrides": decode_options,
+        "language_detection": "pre-decode detect_language on decoder input" if pre_detected
+                              else ("forced" if language_mode != "auto" else "faster-whisper transcribe"),
     }
 
 

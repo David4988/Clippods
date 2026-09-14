@@ -275,10 +275,12 @@ def test_rich_profile_keeps_words_metadata_and_measurements(audio_file, fake_aud
     t = transcription.transcribe_rich(audio_file, profile="rich_v1", language_mode="auto")
 
     _, kwargs = model.transcribe_calls[0]
-    assert kwargs["task"] == "transcribe" and kwargs["language"] is None
+    # rich_v1 resolves the language before decoding (script-aware fallback).
+    assert kwargs["task"] == "transcribe" and kwargs["language"] == "hi"
     assert kwargs["word_timestamps"] is True and kwargs["vad_filter"] is True
-    assert t.language.language == "hi" and t.language.probability == 0.91
-    assert t.language.top[0] == ("hi", 0.91) and model.probe_calls >= 1
+    assert t.language.language == "hi" and t.language.probability == 0.88
+    assert t.asr["language_detection"] == "pre-decode detect_language on decoder input"
+    assert model.probe_calls >= 2  # probes + pre-decode detection
     [s] = t.segments
     assert (s.avg_logprob, s.compression_ratio, s.no_speech_prob, s.token_count) == (-0.3, 1.5, 0.02, 3)
     assert [w.text for w in s.words] == [" नमस्ते", " दोस्तों"]
@@ -419,3 +421,50 @@ def test_only_non_default_fallback_settings_reach_the_decoder(audio_file, fake_a
     kwargs = model.transcribe_calls[-1][1]
     assert kwargs["temperature"] == [0.0] and kwargs["compression_ratio_threshold"] is None
     assert t.asr["settings"]["temperature"] == (0.0,)
+
+
+
+# ---------------------------------------------------------------------------
+# script-aware compression-ratio fallback (rich_v1 only)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("detected, expect_override", [("ta", True), ("hi", True), ("en", False)])
+def test_rich_v1_disables_compression_trigger_only_for_non_latin_script_languages(
+        audio_file, fake_audio, monkeypatch, detected, expect_override):
+    model = FakeModel([raw(1.0, 5.0, " text")], info_language=detected, probe_language=detected)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
+    t = transcription.transcribe_rich(audio_file, profile="rich_v1", language_mode="auto")
+    kwargs = model.transcribe_calls[-1][1]
+    assert kwargs["language"] == detected
+    if expect_override:
+        assert "compression_ratio_threshold" in kwargs and kwargs["compression_ratio_threshold"] is None
+        assert t.asr["decode_overrides"] == {"compression_ratio_threshold": None}
+    else:
+        assert "compression_ratio_threshold" not in kwargs and t.asr["decode_overrides"] == {}
+    assert "temperature" not in kwargs  # the log-probability fallback path stays at defaults
+
+
+def test_rich_v1_forced_tamil_overrides_without_extra_detection(audio_file, fake_audio, monkeypatch):
+    model = FakeModel([raw(1.0, 5.0, " வணக்கம்")], info_language="ta", probe_language="ta")
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
+    probes_only = replace_profile(language_probes=0)
+    t = transcription.transcribe_rich(audio_file, profile=probes_only, language_mode="ta")
+    kwargs = model.transcribe_calls[-1][1]
+    assert kwargs["language"] == "ta" and kwargs["compression_ratio_threshold"] is None
+    assert model.probe_calls == 0 and t.asr["language_detection"] == "forced"
+
+
+def test_legacy_profile_keeps_whisper_thresholds_for_tamil(audio_file, fake_audio, monkeypatch):
+    model = FakeModel([raw(1.0, 5.0, " வணக்கம்")], info_language="ta", probe_language="ta")
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
+    for mode in ("auto", "ta"):
+        transcription.transcribe_rich(audio_file, profile="legacy", language_mode=mode)
+        kwargs = model.transcribe_calls[-1][1]
+        assert "compression_ratio_threshold" not in kwargs
+        assert kwargs["language"] == (None if mode == "auto" else "ta")
+    assert transcription.PROFILES["legacy"].script_aware_compression is False
+
+
+def replace_profile(**changes):
+    from dataclasses import replace
+    return replace(transcription.PROFILES["rich_v1"], name="test", **changes)
