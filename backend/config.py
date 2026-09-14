@@ -81,5 +81,13 @@ DEBUG_RUN_MAX_AGE_HOURS = float(os.environ.get("DEBUG_RUN_MAX_AGE_HOURS", "0"))
 # the clips still exist.
 JOB_RECORD_TTL_HOURS = float(os.environ.get("JOB_RECORD_TTL_HOURS", "24.0"))
 
-# 6. Input limits
+# 6. ASR
+# "legacy" decodes exactly as the original pipeline (legacy_v2 output unchanged)
+# while recording language/confidence metadata, speech regions and quality flags.
+# "rich_v1" adds word timestamps + VAD filtering, which can change segments.
+ASR_PROFILE = os.environ.get("ASR_PROFILE", "legacy")
+if ASR_PROFILE not in ("legacy", "rich_v1"):
+    raise ValueError(f"ASR_PROFILE must be 'legacy' or 'rich_v1', got {ASR_PROFILE!r}")
+
+# 7. Input limits
 MAX_VIDEO_DURATION_SECONDS = float(os.environ.get("MAX_VIDEO_DURATION_SECONDS", str(120 * 60)))

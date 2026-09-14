@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from tests.fakes import transcript_from_segments
 
 client = TestClient(app)
 
@@ -40,8 +41,8 @@ def _pipeline_patches(tmp_path: Path, generate_return: list[str] | None = None):
               new=AsyncMock(return_value=tmp_path / "video.mp4")),
         patch("routers.video.extract_audio",
               return_value=str(tmp_path / "audio.wav")),
-        patch("routers.video.transcribe",
-              return_value={"segments": [{"start": 0.0, "end": 5.0, "text": "hi"}]}),
+        patch("routers.video.transcribe_rich",
+              return_value=transcript_from_segments([{"start": 0.0, "end": 5.0, "text": "hi"}])),
         patch.object(ffmpeg_module, "probe",
                      return_value={"format": {"duration": "120.0"}}),
         patch("routers.video.select_segments",
@@ -177,7 +178,7 @@ class TestJsonRoute:
                           return_value={"format": {"duration": "60.0"}}), \
              patch("routers.video.extract_audio",
                    return_value=str(tmp_path / "audio.wav")), \
-             patch("routers.video.transcribe",
+             patch("routers.video.transcribe_rich",
                    side_effect=HTTPException(502, "Sarvam down")), \
              patch("routers.video.cleanup_file"):
 
@@ -235,8 +236,8 @@ class TestCleanup:
 
         with patch("routers.video.get_video_input", new=AsyncMock(return_value=video)), \
              patch("routers.video.extract_audio", return_value=str(audio)), \
-             patch("routers.video.transcribe",
-                   return_value={"segments": [{"start": 0.0, "end": 5.0, "text": "x"}]}), \
+             patch("routers.video.transcribe_rich",
+                   return_value=transcript_from_segments([{"start": 0.0, "end": 5.0, "text": "x"}])), \
              patch.object(ffmpeg_module, "probe",
                           return_value={"format": {"duration": "60.0"}}), \
              patch("routers.video.select_segments",
@@ -272,7 +273,7 @@ class TestCleanup:
              patch.object(ffmpeg_module, "probe",
                           return_value={"format": {"duration": "60.0"}}), \
              patch("routers.video.extract_audio", return_value=str(audio)), \
-             patch("routers.video.transcribe",
+             patch("routers.video.transcribe_rich",
                    side_effect=HTTPException(502, "Sarvam down")), \
              patch("routers.video.cleanup_file", mock_cleanup), \
              patch("routers.video.cleanup_temp_artifacts", mock_cleanup):
@@ -317,8 +318,8 @@ class TestDurationGuard:
                           return_value={"format": {"duration": "7200.0"}}), \
              patch("routers.video.extract_audio",
                    return_value=str(tmp_path / "audio.wav")), \
-             patch("routers.video.transcribe",
-                   return_value={"segments": [{"start": 0.0, "end": 5.0, "text": "x"}]}), \
+             patch("routers.video.transcribe_rich",
+                   return_value=transcript_from_segments([{"start": 0.0, "end": 5.0, "text": "x"}])), \
              patch("routers.video.select_segments",
                    return_value=[{"start": 0.0, "end": 20.0},
                                   {"start": 300.0, "end": 320.0},

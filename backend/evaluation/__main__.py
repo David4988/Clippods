@@ -107,6 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--render", action="store_true", help="also cut MP4 clips into the run folder")
         p.add_argument("--no-cache", action="store_true", help="rebuild every stage instead of reusing cache")
         p.add_argument("--note", default="", help="free-text note stored in run.json")
+        p.add_argument("--asr-profile", default="legacy", choices=["legacy", "rich_v1"],
+                       help="ASR profile (legacy decodes like the original pipeline)")
 
     p_run = sub.add_parser("run", help="evaluate a dataset manifest")
     p_run.add_argument("--dataset", required=True, type=Path)
@@ -201,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     outcome = runner.run_evaluation(
         dataset,
         runner.RunOptions(engines=engines, use_cache=not args.no_cache, render=args.render,
-                          item_ids=items, note=args.note),
+                          item_ids=items, note=args.note, asr_profile=args.asr_profile),
     )
     print(f"\nrun: {outcome.run_id}\n  at {outcome.run_dir}")
     if outcome.failed_items:

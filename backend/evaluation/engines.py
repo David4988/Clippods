@@ -6,7 +6,7 @@ behaviour) or "legacy_v2@5" (fair comparison with the 5-clip target, D23).
 
 Every engine takes the same inputs so that comparisons isolate selection:
 
-    run(transcript: dict, video_duration: float, clip_count: int) -> EngineResult
+    run(transcript: Transcript, video_duration: float, clip_count: int) -> EngineResult
 
 Phase 0 registers only legacy_v2, which calls the production
 `select_segments` unchanged. New engines (boundary_v1, boundary_v1+semantic)
@@ -14,7 +14,6 @@ are added in later phases behind the same interface.
 """
 from __future__ import annotations
 
-import copy
 import re
 from dataclasses import dataclass
 from typing import Callable
@@ -49,12 +48,12 @@ def parse_engine_spec(spec: str) -> EngineSpec:
     return EngineSpec(name, int(match["count"]))
 
 
-def _run_legacy_v2(transcript: dict, video_duration: float, clip_count: int) -> EngineResult:
+def _run_legacy_v2(transcript, video_duration: float, clip_count: int) -> EngineResult:
     from services.analysis_constants import ALGORITHM_VERSION
     from services.segment_selection import select_segments
 
     selected, analysis = select_segments(
-        copy.deepcopy(transcript["segments"]),
+        transcript.legacy_segments(),  # the only view legacy_v2 understands
         video_duration,
         max_clips=clip_count,
         collect_analysis=True,
@@ -62,10 +61,10 @@ def _run_legacy_v2(transcript: dict, video_duration: float, clip_count: int) -> 
     return EngineResult(clips=selected, analysis=analysis, engine_version=ALGORITHM_VERSION)
 
 
-ENGINES: dict[str, Callable[[dict, float, int], EngineResult]] = {
+ENGINES: dict[str, Callable[..., EngineResult]] = {
     "legacy_v2": _run_legacy_v2,
 }
 
 
-def run_engine(spec: EngineSpec, transcript: dict, video_duration: float) -> EngineResult:
+def run_engine(spec: EngineSpec, transcript, video_duration: float) -> EngineResult:
     return ENGINES[spec.name](transcript, video_duration, spec.clip_count)

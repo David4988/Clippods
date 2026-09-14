@@ -33,6 +33,8 @@ apply here (decision D14).
 | `hash <media>` | sha256 for pinning media in a manifest |
 | `promote <run_id>` | Copy a finished run's small JSON into git-tracked `evaluation/results/` |
 | `where` | Print data directories |
+| `run`/`adhoc` `--asr-profile legacy\|rich_v1` | ASR profile for the transcript stage (default `legacy`) |
+| `python -m evaluation.inspect_transcript <run_id> <item_id> [--flagged] [--segments N]` | Readable transcript summary: language, probes, quality, flags, words |
 | `dataset add --manifest M --media FILE --id ID --languages ta[,en] [--tags …] [--speakers N] [--source-url URL] [--notes TEXT] [--copy]` | Hash + probe a media file and append it to an unfrozen manifest |
 | `dataset label-template --manifest M --item ID` | Create `labels/<ID>.json` from the draft label schema (never overwrites) |
 | `dataset check M [--for-freeze] [--skip-hashes]` | Validate manifest, media hashes, labels and composition coverage |
@@ -81,20 +83,20 @@ runs/<run_id>/
 key = sha256({stage, stage_version, inputs, config})
 ```
 
-- **inputs** chain upstream keys (`probe`/`audio` ← media sha256, `transcript_legacy` ← audio key),
+- **inputs** chain upstream keys (`probe`/`audio` ← media sha256, `transcript` ← audio key),
   so changing an early stage invalidates everything after it.
 - **config** holds every output-affecting parameter (model, compute type, beam
   size, library versions…). A new ASR configuration is a new key; old entries remain for comparison.
 - **stage_version** is bumped by hand when stage code changes behaviour without a config change.
 - Entries are built in a temp folder and renamed into place; `_entry.json` is
   written last and marks an entry complete. Interrupted builds never look valid.
-- The legacy transcription stage **refuses** to cache the production stub
-  transcript that appears when Faster-Whisper cannot load.
+- Transcription failures raise; nothing fabricated is ever cached.
 - Media hashes are memoised by (path, size, mtime) so multi-GB files are hashed once.
 
 Stages today: `probe`, `audio` (16 kHz mono WAV, ≈ 115 MB per hour of media),
-`transcript_legacy` (Faster-Whisper `base`, cpu/int8, beam 5; ignores
-`language_mode`, which is recorded as `language_mode_honoured: false`).
+`transcript` (`services.transcription.transcribe_rich`; the key includes the full
+ASR profile and the item's `language_mode`). Engines receive the typed
+`Transcript`; `legacy_v2` uses its `legacy_segments()` view.
 Selection is not cached. It is the thing under test and is cheap to recompute.
 
 ## Metrics available now

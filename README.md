@@ -173,6 +173,7 @@ cp backend/.env.example backend/.env   # optional
 | `FFMPEG_TIMEOUT_SECONDS`   | FFmpeg subprocess timeout          | `300`         |
 | `YT_DLP_TIMEOUT_SECONDS`   | yt-dlp download timeout            | `600`         |
 | `MAX_VIDEO_DURATION_SECONDS` | Longest accepted video (seconds) | `7200`        |
+| `ASR_PROFILE`              | `legacy` (original decode) or `rich_v1` (adds word timestamps + VAD filtering) | `legacy` |
 | `TEMP_FILE_MAX_AGE_HOURS`  | Temp file age before cleanup (files of running jobs are never removed) | `4` |
 | `OUTPUT_DIR_MAX_AGE_HOURS` | Output run folder age before cleanup | `24`        |
 | `DEBUG_RUN_MAX_AGE_HOURS`  | With `ENABLE_DEBUGGER=true`: age before runs with `analysis.json` are removed (`0` = keep) | `0` |
@@ -257,8 +258,8 @@ Start the backend with `ENABLE_DEBUGGER=true` if you want it to return data.
 
 | Method | Endpoint | Description |
 | ------ | -------- | ----------- |
-| `POST` | `/process` | Submit a video URL. JSON body `{"video_url": "..."}` → `202 {"job_id"}` |
-| `POST` | `/process/upload` | Upload a video file (multipart field `file`) → `202 {"job_id"}` |
+| `POST` | `/process` | Submit a video URL. JSON body `{"video_url": "...", "language": "auto"}` → `202 {"job_id"}` |
+| `POST` | `/process/upload` | Upload a video file (multipart fields `file`, optional `language`) → `202 {"job_id"}` |
 | `GET`  | `/status/{job_id}` | Job status, progress, clips, error and `warnings` |
 | `POST` | `/cancel/{job_id}` | Cancel a queued or running job |
 | `GET`  | `/clips/{filename}` | Download a generated clip |
@@ -268,8 +269,14 @@ Start the backend with `ENABLE_DEBUGGER=true` if you want it to return data.
 | `GET`  | `/dev/analysis/{run_uuid}/summary` | Debugger: meta and stats only |
 | `GET`  | `/dev/video/{run_uuid}` | Debugger: original video (requires `KEEP_ORIGINAL_FOR_DEBUG=true`) |
 
-Errors are returned as `{"error": "..."}`. Failed and cancelled runs also write an
-`analysis.json` recording the stage that stopped and why.
+`language` is the spoken language: `auto` (default, detected), `en`, `hi` or `ta`.
+Speech is always transcribed in its own language, never translated.
+
+Errors are returned as `{"error": "..."}`. Each run folder holds `analysis.json`
+(with an `asr` summary: language decision, quality status, flags) and
+`transcript.json` (the full source-language transcript: segments, confidence
+fields, word timings when enabled, speech regions, quality flags). Failed and
+cancelled runs also write `analysis.json` recording the stage that stopped and why.
 
 ---
 

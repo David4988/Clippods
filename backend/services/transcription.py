@@ -1,16 +1,48 @@
+"""
+services/transcription.py — source-language ASR with Faster-Whisper.
+
+`transcribe_rich()` returns the typed Transcript contract (services/transcript.py):
+language and confidence metadata, per-segment quality fields, optional word
+timestamps, measured speech regions and visible quality flags.
+
+`transcribe()` is the legacy entry point and returns only
+`{"segments": [{"start", "end", "text"}]}`, decoded exactly as before.
+
+ASR profiles (the decode settings are what change transcripts):
+
+  legacy   base · cpu/int8 · beam 5 · no word timestamps · no VAD filter.
+           Decodes identically to the pre-contract pipeline, so legacy_v2
+           output is unchanged. Speech regions and language probes are measured
+           on the side and never feed the decoder.
+  rich_v1  legacy + word timestamps + VAD filter (faster-whisper defaults).
+           Word timestamps move the decoder's seek position, so segment
+           boundaries can differ from `legacy`. Intended for boundary-aware
+           engines.
+
+task is always "transcribe": speech is never translated.
+"""
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TypedDict
-
-from fastapi import HTTPException
-
-# ---------------------------------------------------------------------------
-# Faster-Whisper model initialisation (Lazy Loaded)
-# ---------------------------------------------------------------------------
 import logging
 import os
 import threading
+import time
+from dataclasses import asdict, dataclass, replace
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from typing import Optional, TypedDict
+
+from fastapi import HTTPException
+
+from services.transcript import (
+    LANGUAGE_MODES,
+    SCHEMA,
+    LanguageInfo,
+    LanguageProbe,
+    Transcript,
+    TranscriptSegment,
+    Word,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,40 +53,88 @@ logger = logging.getLogger(__name__)
 if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
     os.environ.setdefault("HF_HOME", "/tmp/huggingface")
 
-_model = None
+
+# ---------------------------------------------------------------------------
+# Profiles
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AsrProfile:
+    name: str
+    model: str = "base"
+    device: str = "cpu"
+    compute_type: str = "int8"
+    beam_size: int = 5
+    word_timestamps: bool = False
+    vad_filter: bool = False
+    vad_parameters: Optional[dict] = None       # None = faster-whisper VadOptions defaults
+    condition_on_previous_text: bool = True
+    language_detection_segments: int = 1
+    # faster-whisper defaults: fall back through these temperatures when a window's
+    # compression_ratio > 2.4 or avg_logprob < -1.0. The ratio is byte-level and
+    # script-biased (EV-2.4), so the fallback can misfire on Tamil.
+    temperature: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+    compression_ratio_threshold: Optional[float] = 2.4
+    # Measured alongside decoding; never change what the decoder sees.
+    speech_regions: bool = True
+    language_probes: int = 8                    # 30 s speech windows spread across the file
+
+
+PROFILES: dict[str, AsrProfile] = {
+    "legacy": AsrProfile(name="legacy"),
+    "rich_v1": AsrProfile(name="rich_v1", word_timestamps=True, vad_filter=True),
+}
+
+# What the legacy transcribe() wrapper runs: the legacy decode with nothing extra,
+# so it never needs to decode audio itself.
+_LEGACY_PLAIN = replace(PROFILES["legacy"], speech_regions=False, language_probes=0)
+
+
+def get_profile(name: str) -> AsrProfile:
+    try:
+        return PROFILES[name]
+    except KeyError:
+        raise ValueError(f"unknown ASR profile {name!r}; available: {sorted(PROFILES)}") from None
+
+
+# ---------------------------------------------------------------------------
+# Model cache
+# ---------------------------------------------------------------------------
+
+_models: dict[tuple[str, str, str], object] = {}
 _model_lock = threading.Lock()
 _model_load_error: str | None = None
 
 
-def get_model():
+def get_model(model: str = "base", device: str = "cpu", compute_type: str = "int8"):
     """
-    Return the shared Faster-Whisper model, loading it on first use.
+    Return a shared Faster-Whisper model, loading it on first use.
 
     Returns None if it cannot be loaded; the reason is kept in
-    `_model_load_error`. A failed load is retried on the next call, so a
-    transient problem (e.g. the first model download failing) does not disable
-    transcription for the life of the process.
+    `_model_load_error`. A failed load is retried on the next call.
     """
-    global _model, _model_load_error
-    if _model is not None:
-        return _model
+    global _model_load_error
+    key = (model, device, compute_type)
+    if key in _models:
+        return _models[key]
 
     with _model_lock:
-        if _model is not None:
-            return _model
+        if key in _models:
+            return _models[key]
         try:
             from faster_whisper import WhisperModel
-            _model = WhisperModel("base", device="cpu", compute_type="int8")
+            _models[key] = WhisperModel(model, device=device, compute_type=compute_type)
             _model_load_error = None
-            logger.info("Faster-Whisper 'base' model loaded (cpu/int8).")
+            logger.info("Faster-Whisper '%s' model loaded (%s/%s).", model, device, compute_type)
         except Exception as e:
             _model_load_error = f"{type(e).__name__}: {e}"
             logger.error("Faster-Whisper could not be loaded: %s", _model_load_error)
+            return None
+    return _models[key]
 
-    return _model
 
 # ---------------------------------------------------------------------------
-# Types
+# Legacy types and entry point
 # ---------------------------------------------------------------------------
 
 class Segment(TypedDict):
@@ -73,17 +153,9 @@ _PROGRESS_START = 60
 _PROGRESS_END = 74
 
 
-# ---------------------------------------------------------------------------
-# Main function
-# ---------------------------------------------------------------------------
-
 def transcribe(audio_path: str, job_id: str | None = None) -> TranscriptResult:
     """
-    Transcribe *audio_path* with the legacy configuration (model "base",
-    cpu/int8, beam 5, automatic language detection, no VAD, no word timestamps).
-
-    With a job_id, progress is reported as decoding advances and cancellation is
-    honoured between segments. Neither changes what is decoded.
+    Legacy entry point: the legacy decode, returning only start/end/text.
 
     Raises HTTPException:
       400  audio missing or empty
@@ -91,26 +163,45 @@ def transcribe(audio_path: str, job_id: str | None = None) -> TranscriptResult:
       502  Faster-Whisper failed while transcribing (message keeps the cause)
       503  Faster-Whisper could not be loaded (no stub transcript is produced)
     """
-    import time
+    transcript = transcribe_rich(audio_path, job_id=job_id, profile=_LEGACY_PLAIN)
+    return TranscriptResult(segments=transcript.legacy_segments())
+
+
+# ---------------------------------------------------------------------------
+# Rich transcription
+# ---------------------------------------------------------------------------
+
+def transcribe_rich(
+    audio_path: str,
+    *,
+    job_id: str | None = None,
+    profile: AsrProfile | str = "legacy",
+    language_mode: str = "auto",
+) -> Transcript:
+    """
+    Transcribe *audio_path* in its spoken language and return a Transcript.
+
+    language_mode: "auto" (detect) or a forced "en" | "hi" | "ta".
+    Failures raise (see transcribe()); a transcript is never fabricated.
+    """
+    from services import transcript_quality
     from utils import log_instrumentation
 
-    start_time = time.time()
-    log_instrumentation("transcription")
+    if isinstance(profile, str):
+        profile = get_profile(profile)
+    if language_mode not in LANGUAGE_MODES:
+        raise HTTPException(status_code=400, detail=f"language must be one of {list(LANGUAGE_MODES)}")
 
+    started = time.time()
+    timings: dict[str, float] = {}
+    log_instrumentation("transcription")
     try:
         src = Path(audio_path)
-
         if not src.exists() or src.stat().st_size == 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Audio file not found or empty: {audio_path}",
-            )
+            raise HTTPException(status_code=400, detail=f"Audio file not found or empty: {audio_path}")
 
-        model = get_model()
-
+        model = get_model(profile.model, profile.device, profile.compute_type)
         if model is None:
-            # Previously a fake 30-second transcript was returned here and the
-            # job "succeeded" with clips cut from nothing.
             raise HTTPException(
                 status_code=503,
                 detail=(
@@ -120,31 +211,56 @@ def transcribe(audio_path: str, job_id: str | None = None) -> TranscriptResult:
                 ),
             )
 
-        segments: list[Segment] = []
+        needs_audio = profile.speech_regions or profile.language_probes > 0
+        audio = None
+        speech = None
+        probes: list[LanguageProbe] = []
+
         try:
-            # faster-whisper decodes lazily: model.transcribe() only detects the
-            # language, and the real decoding happens while iterating. Both
-            # parts must be inside this error boundary.
-            segments_generator, info = model.transcribe(audio_path, beam_size=5)
+            if needs_audio:
+                t0 = time.perf_counter()
+                from faster_whisper import decode_audio
+                audio = decode_audio(str(src), sampling_rate=16000)
+                timings["decode_audio_s"] = round(time.perf_counter() - t0, 3)
+
+            if profile.speech_regions:
+                _raise_if_cancelled(job_id)
+                t0 = time.perf_counter()
+                from services.speech_regions import detect_speech_regions
+                speech = detect_speech_regions(audio)
+                timings["speech_regions_s"] = round(time.perf_counter() - t0, 3)
+
+            if profile.language_probes > 0:
+                _raise_if_cancelled(job_id)
+                t0 = time.perf_counter()
+                probes = _probe_languages(model, audio, speech, profile.language_probes)
+                timings["language_probes_s"] = round(time.perf_counter() - t0, 3)
+
+            _raise_if_cancelled(job_id)
+            t0 = time.perf_counter()
+            segments_generator, info = model.transcribe(
+                audio if audio is not None else str(src),
+                task="transcribe",
+                language=None if language_mode == "auto" else language_mode,
+                beam_size=profile.beam_size,
+                word_timestamps=profile.word_timestamps,
+                vad_filter=profile.vad_filter,
+                vad_parameters=profile.vad_parameters,
+                condition_on_previous_text=profile.condition_on_previous_text,
+                language_detection_segments=profile.language_detection_segments,
+                **_non_default_decode_options(profile),
+            )
             total_duration = getattr(info, "duration", None)
+            segments: list[TranscriptSegment] = []
             last_progress = None
 
-            for seg in segments_generator:
-                start = seg.start
-                end = seg.end
-                text = seg.text or ""
-
-                if start is not None and end is not None:
-                    segments.append(
-                        Segment(
-                            start=float(start),
-                            end=float(end),
-                            text=text.strip(),
-                        )
-                    )
-
+            # Decoding happens lazily while iterating; keep it inside this boundary.
+            for raw in segments_generator:
+                if raw.start is not None and raw.end is not None:
+                    segments.append(_segment_from(raw, len(segments), profile.word_timestamps))
                 if job_id is not None:
-                    last_progress = _report_progress(job_id, end, total_duration, last_progress)
+                    last_progress = _report_progress(job_id, raw.end, total_duration, last_progress)
+            timings["decode_s"] = round(time.perf_counter() - t0, 3)
         except HTTPException:
             raise
         except Exception as exc:
@@ -153,20 +269,188 @@ def transcribe(audio_path: str, job_id: str | None = None) -> TranscriptResult:
                 detail=f"Transcription failed: {type(exc).__name__}: {exc}",
             ) from exc
 
-        return TranscriptResult(segments=segments)
+        audio_duration = (
+            round(len(audio) / 16000, 3) if audio is not None
+            else round(float(total_duration), 3) if isinstance(total_duration, (int, float))
+            else (segments[-1].end if segments else 0.0)
+        )
+
+        forced = language_mode != "auto"
+        language = LanguageInfo(
+            mode=language_mode,
+            language=getattr(info, "language", None) or (language_mode if forced else "unknown"),
+            probability=None if forced else _float(getattr(info, "language_probability", None)),
+            top=[] if forced else [(code, round(float(p), 4)) for code, p in
+                                   (getattr(info, "all_language_probs", None) or [])[:5]],
+            probes=probes,
+            uncertain=False,
+            reasons=[],
+        )
+
+        t0 = time.perf_counter()
+        transcript_quality.assess_language(language)
+        transcript_quality.flag_segments(segments, language.language, audio_duration, speech)
+        quality = transcript_quality.summarise(segments, language, speech)
+        timings["quality_s"] = round(time.perf_counter() - t0, 3)
+        timings["total_s"] = round(time.time() - started, 3)
+
+        return Transcript(
+            schema=SCHEMA,
+            asr=_asr_record(profile, language_mode, info),
+            audio_duration=audio_duration,
+            language=language,
+            segments=segments,
+            speech_regions=speech,
+            quality=quality,
+            timings=timings,
+        )
     finally:
-        elapsed = time.time() - start_time
-        log_instrumentation("transcription", elapsed)
+        log_instrumentation("transcription", time.time() - started)
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+def _non_default_decode_options(profile: AsrProfile) -> dict:
+    """Only pass fallback settings that differ from faster-whisper's defaults."""
+    defaults = AsrProfile(name="defaults")
+    options = {}
+    if profile.temperature != defaults.temperature:
+        options["temperature"] = list(profile.temperature)
+    if profile.compression_ratio_threshold != defaults.compression_ratio_threshold:
+        options["compression_ratio_threshold"] = profile.compression_ratio_threshold
+    return options
+
+
+def _float(value) -> Optional[float]:
+    return None if value is None else round(float(value), 4)
+
+
+def _segment_from(raw, index: int, with_words: bool) -> TranscriptSegment:
+    words = None
+    if with_words:
+        words = [
+            Word(start=round(float(w.start), 3), end=round(float(w.end), 3), text=w.word,
+                 probability=_float(getattr(w, "probability", None)))
+            for w in (getattr(raw, "words", None) or [])
+            if w.start is not None and w.end is not None
+        ]
+    tokens = getattr(raw, "tokens", None)
+    return TranscriptSegment(
+        id=index,
+        start=float(raw.start),
+        end=float(raw.end),
+        text=(raw.text or "").strip(),
+        avg_logprob=_float(getattr(raw, "avg_logprob", None)),
+        compression_ratio=_float(getattr(raw, "compression_ratio", None)),
+        no_speech_prob=_float(getattr(raw, "no_speech_prob", None)),
+        temperature=_float(getattr(raw, "temperature", None)),
+        token_count=len(tokens) if isinstance(tokens, (list, tuple)) else None,
+        words=words,
+    )
+
+
+def _asr_record(profile: AsrProfile, language_mode: str, info) -> dict:
+    def pkg(name):
+        try:
+            return version(name)
+        except PackageNotFoundError:
+            return None
+
+    options = getattr(info, "transcription_options", None)
+    vad_options = getattr(info, "vad_options", None)
+    return {
+        "engine": "faster-whisper",
+        "profile": profile.name,
+        "settings": asdict(profile),
+        "task": "transcribe",
+        "language_mode": language_mode,
+        "versions": {"faster-whisper": pkg("faster-whisper"), "ctranslate2": pkg("ctranslate2")},
+        # What faster-whisper reports it actually used (defaults included).
+        "effective_options": _plain(options),
+        "effective_vad_options": _plain(vad_options),
+        "duration_after_vad": _float(getattr(info, "duration_after_vad", None)),
+    }
+
+
+def _plain(obj):
+    if obj is None:
+        return None
+    try:
+        data = asdict(obj)
+    except TypeError:
+        data = getattr(obj, "_asdict", lambda: None)() or getattr(obj, "__dict__", None)
+    if not isinstance(data, dict):
+        return None
+    return {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool, type(None), list, tuple))}
+
+
+def _probe_languages(model, audio, speech, count: int) -> list[LanguageProbe]:
+    """
+    Run language detection on up to *count* ~30 s windows of speech spread across
+    the file. Detection on the first 30 s alone (faster-whisper's default) is
+    easily fooled by intros; the probes make disagreement visible.
+    """
+    import math
+    import numpy as np
+
+    sr = 16000
+    window_s = 30.0
+    regions = speech.regions if speech is not None and speech.regions else [(0.0, len(audio) / sr)]
+    total_speech = sum(e - s for s, e in regions)
+    if total_speech < 1.0:
+        return []
+
+    # Positions measured in seconds of *speech* (silence and music excluded).
+    if total_speech <= window_s * count:
+        anchors = [i * window_s for i in range(math.ceil(total_speech / window_s))]
+    else:
+        stride = (total_speech - window_s) / (count - 1) if count > 1 else 0.0
+        anchors = [i * stride for i in range(count)]
+
+    probes: list[LanguageProbe] = []
+    for anchor in anchors:
+        pieces, gathered, speech_before = [], 0.0, 0.0
+        first_start = last_end = None
+        for s, e in regions:
+            length = e - s
+            if speech_before + length <= anchor:
+                speech_before += length
+                continue
+            start = s + max(0.0, anchor - speech_before)
+            speech_before += length
+            take = min(e - start, window_s - gathered)
+            if take <= 0:
+                break
+            pieces.append(audio[int(start * sr):int((start + take) * sr)])
+            gathered += take
+            first_start = start if first_start is None else first_start
+            last_end = start + take
+            if gathered >= window_s:
+                break
+        if gathered < 1.0:
+            continue
+        language, probability, _ = model.detect_language(audio=np.concatenate(pieces))
+        probes.append(LanguageProbe(start=round(first_start, 2), end=round(last_end, 2),
+                                    language=language, probability=round(float(probability), 4)))
+    return probes
+
+
+def _raise_if_cancelled(job_id: str | None) -> None:
+    if job_id is None:
+        return
+    from job_manager import is_job_cancelled
+    if is_job_cancelled(job_id):
+        raise HTTPException(status_code=499, detail="Job cancelled by user.")
 
 
 def _report_progress(job_id: str, position: float | None, total: float | None,
                      last_progress: int | None) -> int | None:
     """Honour cancellation and publish progress. Returns the last published value."""
-    from job_manager import is_job_cancelled, update_job
+    from job_manager import update_job
 
-    if is_job_cancelled(job_id):
-        raise HTTPException(status_code=499, detail="Job cancelled by user.")
-
+    _raise_if_cancelled(job_id)
     if not total or position is None:
         return last_progress
 

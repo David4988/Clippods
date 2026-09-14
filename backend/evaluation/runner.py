@@ -48,6 +48,7 @@ class RunOptions:
     render: bool = False
     item_ids: list[str] | None = None
     note: str = ""
+    asr_profile: str = "legacy"
 
 
 @dataclass
@@ -111,7 +112,7 @@ def run_evaluation(dataset: Dataset, options: RunOptions, log=print) -> RunOutco
                     "manifest_sha256": dataset.manifest_sha256,
                     "items": [i.id for i in items]},
         "engines": [e.label for e in options.engines],
-        "options": {"use_cache": options.use_cache, "render": options.render},
+        "options": {"use_cache": options.use_cache, "render": options.render, "asr_profile": options.asr_profile},
         "git": _git_state(),
         "environment": _environment(),
         "items": {},
@@ -139,10 +140,12 @@ def run_evaluation(dataset: Dataset, options: RunOptions, log=print) -> RunOutco
                 audio = stages.run_audio(cache, item.media_path, media_sha)
                 log(f"[{item.id}] audio {'hit' if audio.hit else 'built'}")
 
-                transcript_res = stages.run_transcript_legacy(cache, audio, duration)
-                log(f"[{item.id}] transcript_legacy {'hit' if transcript_res.hit else 'built'} "
-                    f"({transcript_res.entry['build']['segment_count']} segments, "
-                    f"{transcript_res.entry['build']['wall_s']}s to build)")
+                transcript_res = stages.run_transcript(cache, audio, options.asr_profile, item.language_mode)
+                built = transcript_res.entry["build"]
+                log(f"[{item.id}] transcript[{options.asr_profile}/{item.language_mode}] "
+                    f"{'hit' if transcript_res.hit else 'built'} ({built['segment_count']} segments, "
+                    f"language {built['language']}, quality {built['quality_status']}, "
+                    f"{built['hallucination_suspect_segments']} suspect, {built['wall_s']}s to build)")
                 transcript = stages.load_transcript(transcript_res)
 
                 stage_records = {
@@ -150,8 +153,6 @@ def run_evaluation(dataset: Dataset, options: RunOptions, log=print) -> RunOutco
                                 "config": res.entry["config"]}
                     for res in (probe, audio, transcript_res)
                 }
-                stage_records["transcript_legacy"]["language_mode_requested"] = item.language_mode
-                stage_records["transcript_legacy"]["language_mode_honoured"] = False
                 item_record["stages"] = stage_records
                 write_json(item_dir / "stages.json", stage_records)
 
@@ -202,14 +203,17 @@ def run_evaluation(dataset: Dataset, options: RunOptions, log=print) -> RunOutco
 
 
 def _summary_row(item_id: str, engine: str, duration: float, stage_records: dict, metrics: dict) -> dict:
-    asr = stage_records["transcript_legacy"]["build"]
+    asr = stage_records["transcript"]["build"]
     return {
         "item": item_id,
         "engine": engine,
         "video_duration_s": duration,
         "asr_wall_s": asr.get("wall_s"),
         "asr_rtf": asr.get("real_time_factor"),
-        "asr_cache_hit": stage_records["transcript_legacy"]["cache_hit"],
+        "asr_cache_hit": stage_records["transcript"]["cache_hit"],
+        "language": asr.get("language"),
+        "asr_quality": asr.get("quality_status"),
+        "asr_suspect_segments": asr.get("hallucination_suspect_segments"),
         "clip_count": metrics["clip_count"],
         "distinct_spans": metrics["distinct_spans"],
         "identical_pairs": metrics["identical_pairs"],

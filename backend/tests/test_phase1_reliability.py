@@ -24,6 +24,7 @@ import job_manager
 from main import app
 from services import transcription
 from tests.legacy.test_legacy_v2_golden import load_fixture
+from tests.fakes import transcript_from_segments
 from utils import write_json_atomic
 
 client = TestClient(app)
@@ -60,12 +61,12 @@ def _pipeline(tmp_path, *, segments, duration="300.0", transcribe_side_effect=No
     """Patch the media-touching services; keep the REAL select_segments."""
     import ffmpeg as ffmpeg_module
     transcribe_kwargs = ({"side_effect": transcribe_side_effect} if transcribe_side_effect
-                         else {"return_value": {"segments": segments}})
+                         else {"return_value": transcript_from_segments(segments)})
     return [
         patch("routers.video.get_video_input", new=AsyncMock(return_value=tmp_path / "video.mp4")),
         patch.object(ffmpeg_module, "probe", return_value={"format": {"duration": duration}}),
         patch("routers.video.extract_audio", return_value=str(tmp_path / "audio.wav")),
-        patch("routers.video.transcribe", **transcribe_kwargs),
+        patch("routers.video.transcribe_rich", **transcribe_kwargs),
         patch("routers.video.generate_clips", side_effect=generate_side_effect
               or (lambda video, selected, job_id=None: _fake_clip_paths(selected))),
     ]
@@ -247,7 +248,7 @@ def _seg(start, end, text="x"):
 
 
 def test_unavailable_model_raises_instead_of_returning_a_stub(tmp_path, monkeypatch):
-    monkeypatch.setattr(transcription, "get_model", lambda: None)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: None)
     monkeypatch.setattr(transcription, "_model_load_error", "ImportError: No module named 'av'")
     with pytest.raises(HTTPException) as exc:
         transcription.transcribe(_audio(tmp_path))
@@ -265,7 +266,7 @@ def test_model_load_failure_is_retried(monkeypatch):
                 raise RuntimeError("download interrupted")
 
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FlakyWhisper))
-    monkeypatch.setattr(transcription, "_model", None)
+    monkeypatch.setattr(transcription, "_models", {})
     assert transcription.get_model() is None
     assert "download interrupted" in transcription._model_load_error
     assert isinstance(transcription.get_model(), FlakyWhisper)
@@ -274,7 +275,7 @@ def test_model_load_failure_is_retried(monkeypatch):
 
 def test_error_while_decoding_keeps_the_cause(tmp_path, monkeypatch):
     model = _model([_seg(0, 1), RuntimeError("CUDA-less decoder crashed mid-stream")])
-    monkeypatch.setattr(transcription, "get_model", lambda: model)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
     with pytest.raises(HTTPException) as exc:
         transcription.transcribe(_audio(tmp_path))
     assert exc.value.status_code == 502
@@ -287,7 +288,7 @@ def test_cancellation_stops_transcription_between_segments(tmp_path, monkeypatch
     consumed = []
     segments = [_seg(i, i + 1) for i in range(50)]
     model = _model(segments, duration=50.0, consumed=consumed)
-    monkeypatch.setattr(transcription, "get_model", lambda: model)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
 
     real_update = job_manager.update_job
 
@@ -310,7 +311,7 @@ def test_transcription_reports_monotonic_progress(tmp_path, monkeypatch):
     monkeypatch.setattr(job_manager, "update_job",
                         lambda jid, **kw: seen.append((kw.get("progress"), kw.get("message"))))
     model = _model([_seg(t, t + 10) for t in range(0, 100, 10)], duration=100.0)
-    monkeypatch.setattr(transcription, "get_model", lambda: model)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: model)
     transcription.transcribe(_audio(tmp_path), job_id)
 
     progress = [p for p, _ in seen]
@@ -321,11 +322,11 @@ def test_transcription_reports_monotonic_progress(tmp_path, monkeypatch):
 
 def test_job_id_does_not_change_the_transcript(tmp_path, monkeypatch):
     segments = [_seg(0.0, 1.2, " Hello "), _seg(None, 2.0, "dropped"), _seg(1.2, 3.0, "world")]
-    monkeypatch.setattr(transcription, "get_model", lambda: _model(segments, duration=3.0))
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: _model(segments, duration=3.0))
     without = transcription.transcribe(_audio(tmp_path))
     job_id = job_manager.create_job()
     job_manager.update_job(job_id, status="transcribing")
-    monkeypatch.setattr(transcription, "get_model", lambda: _model(segments, duration=3.0))
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: _model(segments, duration=3.0))
     assert transcription.transcribe(_audio(tmp_path), job_id) == without == {
         "segments": [{"start": 0.0, "end": 1.2, "text": "Hello"}, {"start": 1.2, "end": 3.0, "text": "world"}]}
 

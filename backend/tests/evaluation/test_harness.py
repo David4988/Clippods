@@ -18,6 +18,8 @@ from evaluation import dataset as ds
 from evaluation import storage
 from evaluation.engines import parse_engine_spec, run_engine
 from evaluation.metrics import selection_metrics
+from services.transcription import transcribe_rich as REAL_TRANSCRIBE_RICH
+from tests.fakes import transcript_from_segments
 from tests.legacy.test_legacy_v2_golden import load_fixture
 
 
@@ -193,7 +195,7 @@ def test_bad_engine_specs(spec):
 
 def test_legacy_engine_matches_production_function_and_golden():
     fx = load_fixture("english_podcast_10min")
-    result = run_engine(parse_engine_spec("legacy_v2@5"), {"segments": fx["segments"]}, fx["video_duration"])
+    result = run_engine(parse_engine_spec("legacy_v2@5"), transcript_from_segments(fx["segments"]), fx["video_duration"])
     golden = json.loads((Path(__file__).parents[1] / "legacy" / "golden" / "english_podcast_10min@5.json")
                         .read_text(encoding="utf-8"))
     assert result.clips == golden["selected"]
@@ -213,7 +215,7 @@ def test_metrics_count_identical_and_overlapping_clips():
 
 def test_metrics_surface_duplicates_legacy_trace_hides():
     fx = load_fixture("short_12s")
-    result = run_engine(parse_engine_spec("legacy_v2@5"), {"segments": fx["segments"]}, fx["video_duration"])
+    result = run_engine(parse_engine_spec("legacy_v2@5"), transcript_from_segments(fx["segments"]), fx["video_duration"])
     m = selection_metrics(result.clips, 5, fx["video_duration"], result.analysis)
     assert m["identical_pairs"] == 10 and m["legacy"]["reported_duplicated"] == 0
 
@@ -243,14 +245,14 @@ def stubbed_media(eval_dir, monkeypatch):
         wav.write_bytes(b"RIFF")
         return str(wav)
 
-    def fake_transcribe(path):
+    def fake_transcribe(path, *, profile=None, language_mode="auto", job_id=None):
         calls["transcribe"] += 1
-        return {"segments": fx["segments"]}
+        calls["language_mode"] = language_mode
+        return transcript_from_segments(fx["segments"], language="hi")
 
     monkeypatch.setattr(ffmpeg, "probe", fake_probe)
     monkeypatch.setattr(audio_extraction, "extract_audio", fake_extract)
-    monkeypatch.setattr(transcription, "get_model", lambda: object())
-    monkeypatch.setattr(transcription, "transcribe", fake_transcribe)
+    monkeypatch.setattr(transcription, "transcribe_rich", fake_transcribe)
 
     media = eval_dir / "media" / "hi-sample.mp4"
     media.parent.mkdir(parents=True)
@@ -269,15 +271,16 @@ def test_adhoc_run_writes_layout_and_reuses_cache(stubbed_media):
     second = run_evaluation(dataset, options, log=lambda *_: None)
 
     assert first.failed_items == [] and second.failed_items == []
-    assert calls == {"probe": 1, "audio": 1, "transcribe": 1}  # second run is all cache hits
+    assert calls == {"probe": 1, "audio": 1, "transcribe": 1, "language_mode": "hi"}  # second run: cache hits
 
     run = storage.read_json(first.run_dir / "run.json")
     assert run["status"] == "completed"
     assert run["engines"] == ["legacy_v2@3", "legacy_v2@5"]
     item_dir = first.run_dir / "items" / "hi-sample"
     stages_json = storage.read_json(item_dir / "stages.json")
-    assert stages_json["transcript_legacy"]["language_mode_requested"] == "hi"
-    assert stages_json["transcript_legacy"]["language_mode_honoured"] is False
+    assert stages_json["transcript"]["config"]["language_mode"] == "hi"
+    assert stages_json["transcript"]["config"]["profile"]["name"] == "legacy"
+    assert stages_json["transcript"]["build"]["language"] == "hi"
     for label, count in (("legacy_v2@3", 3), ("legacy_v2@5", 5)):
         selection = storage.read_json(item_dir / label / "selection.json")
         assert len(selection["clips"]) == count
@@ -289,18 +292,19 @@ def test_adhoc_run_writes_layout_and_reuses_cache(stubbed_media):
     assert all(s["cache_hit"] for s in second_stages.values())
 
 
-def test_stub_transcription_is_never_cached(stubbed_media, monkeypatch):
+def test_unavailable_model_is_a_failure_and_nothing_is_cached(stubbed_media, monkeypatch):
     from evaluation.runner import RunOptions, run_evaluation
     from services import transcription
 
     media, _ = stubbed_media
-    monkeypatch.setattr(transcription, "get_model", lambda: None)
+    monkeypatch.setattr(transcription, "transcribe_rich", REAL_TRANSCRIBE_RICH)
+    monkeypatch.setattr(transcription, "get_model", lambda *a, **k: None)
     outcome = run_evaluation(ds.adhoc_dataset([media]),
                              RunOptions(engines=[parse_engine_spec("legacy_v2@5")]), log=lambda *_: None)
     run = storage.read_json(outcome.run_dir / "run.json")
     assert outcome.failed_items == ["hi-sample"]
-    assert "refusing to record a stub transcript" in run["items"]["hi-sample"]["error"]
-    assert not list((storage.cache_dir() / "transcript_legacy").rglob("_entry.json"))
+    assert "Transcription is unavailable" in run["items"]["hi-sample"]["error"]
+    assert not list((storage.cache_dir() / "transcript").rglob("_entry.json"))
 
 
 def test_promote_copies_small_json_only(stubbed_media, monkeypatch, tmp_path):

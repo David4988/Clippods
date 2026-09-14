@@ -35,7 +35,7 @@ from job_manager import (
 from services.job_worker import worker_pool
 
 import ffmpeg as ffmpeg_lib
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -43,7 +43,8 @@ from services.audio_extraction import extract_audio
 from services.clip_generation import generate_clips
 from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
-from services.transcription import transcribe
+from services.transcript import LANGUAGE_MODES
+from services.transcription import transcribe_rich
 from utils import cleanup_file, cleanup_temp_artifacts, write_json_atomic
 from config import KEEP_ORIGINAL_FOR_DEBUG
 
@@ -57,6 +58,17 @@ router = APIRouter()
 class VideoUrlRequest(BaseModel):
     """JSON body for URL-based input — Content-Type: application/json."""
     video_url: str
+    # Spoken language: "auto" (detect) or a forced "en" | "hi" | "ta". Never translated.
+    language: str = "auto"
+
+
+def _language_error(language: str) -> Optional[JSONResponse]:
+    if language not in LANGUAGE_MODES:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"language must be one of: {', '.join(LANGUAGE_MODES)}"},
+        )
+    return None
 
 # ---------------------------------------------------------------------------
 # Pipeline Orchestrator (shared by both routes)
@@ -109,6 +121,7 @@ async def _run_pipeline(
     video_url: Optional[str],
     video_path: Optional[Path] = None,
     job_id: Optional[str] = None,
+    language_mode: str = "auto",
 ) -> list[str]:
     """
     Full pipeline: Input → Audio → Transcribe → Select → Cut → Cleanup.
@@ -122,6 +135,7 @@ async def _run_pipeline(
     audio_path: Optional[str] = None
     video_duration: Optional[float] = None
     segments: Optional[list] = None
+    transcript = None
     clip_paths: list[str] = []
     register_job_path(job_id, video_path)
     try:
@@ -178,8 +192,12 @@ async def _run_pipeline(
         if job_id is not None:
             update_job(job_id, status="transcribing", progress=60, message="Transcribing audio...")
         with trace.stage("transcribe"):
-            transcript = await asyncio.to_thread(transcribe, audio_path, job_id)
-        segments = transcript["segments"]
+            transcript = await asyncio.to_thread(
+                transcribe_rich, audio_path,
+                job_id=job_id, profile=config.ASR_PROFILE, language_mode=language_mode,
+            )
+        # legacy_v2 consumes the original start/end/text view of the transcript.
+        segments = transcript.legacy_segments()
 
         _raise_if_cancelled(job_id)
 
@@ -228,6 +246,8 @@ async def _run_pipeline(
                     # Writing the record is not itself a traced stage: the
                     # record would always show it as unfinished.
                     analysis_data["pipeline"] = trace.as_dict("completed")
+                    analysis_data["asr"] = transcript.summary()
+                    write_json_atomic(clip_dir / "transcript.json", transcript.to_dict())
                     analysis_path = write_json_atomic(clip_dir / "analysis.json", analysis_data)
                     logger.info("Pipeline: saved analysis.json to %s", analysis_path)
 
@@ -263,7 +283,7 @@ async def _run_pipeline(
             shutil.rmtree(Path(clip_paths[0]).parent, ignore_errors=True)
         _save_failure_analysis(
             trace, "cancelled" if cancelled else "error", _job_error_message(exc),
-            job_id, video_url, video_path, video_duration, segments,
+            job_id, video_url, video_path, video_duration, segments, transcript,
         )
         raise
     finally:
@@ -295,7 +315,7 @@ def _enrich_meta(analysis: dict, job_id, run_uuid, video_url, video_path) -> Non
 
 
 def _save_failure_analysis(trace: _PipelineTrace, status: str, error: str, job_id, video_url,
-                           video_path, video_duration, segments) -> None:
+                           video_path, video_duration, segments, transcript=None) -> None:
     """
     Write an analysis.json for a run that did not complete, so the debugger can
     show where and why it stopped. Same top-level shape as a completed run
@@ -318,6 +338,9 @@ def _save_failure_analysis(trace: _PipelineTrace, status: str, error: str, job_i
         analysis = collector.to_dict()
         _enrich_meta(analysis, job_id, run_uuid, video_url, video_path)
         analysis["pipeline"] = trace.as_dict(status, error)
+        if transcript is not None:
+            analysis["asr"] = transcript.summary()
+            write_json_atomic(config.OUTPUTS_DIR / run_uuid / "transcript.json", transcript.to_dict())
         write_json_atomic(config.OUTPUTS_DIR / run_uuid / "analysis.json", analysis)
         update_job(job_id, run_uuid=run_uuid)
     except Exception:
@@ -334,7 +357,8 @@ def _job_error_message(exc: BaseException) -> str:
     return str(exc) or exc.__class__.__name__
 
 
-def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optional[Path] = None):
+def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optional[Path] = None,
+                        language_mode: str = "auto"):
     """
     Submits _run_pipeline to the correct execution mode.
     If there is a running event loop (testing environment), schedules it on the current loop.
@@ -350,7 +374,8 @@ def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optio
 
     if loop is not None and loop.is_running():
         # Testing environment with active loop (e.g. TestClient)
-        coro = _run_pipeline(video_url=video_url, video_path=video_path, job_id=job_id)
+        coro = _run_pipeline(video_url=video_url, video_path=video_path, job_id=job_id,
+                             language_mode=language_mode)
         task = loop.create_task(coro)
         
         def on_done(t):
@@ -378,7 +403,8 @@ def _run_background_job(job_id: str, video_url: Optional[str], video_path: Optio
         try:
             if is_job_cancelled(job_id):
                 return
-            clip_names = asyncio.run(_run_pipeline(video_url=video_url, video_path=video_path, job_id=job_id))
+            clip_names = asyncio.run(_run_pipeline(video_url=video_url, video_path=video_path, job_id=job_id,
+                                                   language_mode=language_mode))
             if is_job_cancelled(job_id):
                 return
             update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
@@ -405,6 +431,8 @@ async def process_video_url(body: VideoUrlRequest):
     # Validate non-empty URL
     if not body.video_url.strip():
         return JSONResponse(status_code=400, content={"error": "Provide a video_url URL."})
+    if (bad_language := _language_error(body.language)) is not None:
+        return bad_language
 
     job_id = create_job()
 
@@ -412,7 +440,8 @@ async def process_video_url(body: VideoUrlRequest):
     if getattr(worker_pool, "synchronous", False):
         try:
             update_job(job_id, status="downloading", progress=5, message="Downloading video...")
-            clip_names = await _run_pipeline(video_url=body.video_url, job_id=job_id)
+            clip_names = await _run_pipeline(video_url=body.video_url, job_id=job_id,
+                                             language_mode=body.language)
             update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
             update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
@@ -420,7 +449,7 @@ async def process_video_url(body: VideoUrlRequest):
 
     def _background_run():
         update_job(job_id, status="downloading", progress=5, message="Downloading video...")
-        _run_background_job(job_id, video_url=body.video_url)
+        _run_background_job(job_id, video_url=body.video_url, language_mode=body.language)
 
     # Submit job task to worker pool queue
     queued = worker_pool.submit_job(job_id, _background_run)
@@ -439,7 +468,10 @@ async def process_video_url(body: VideoUrlRequest):
 # ---------------------------------------------------------------------------
 
 @router.post("/process/upload", status_code=status.HTTP_202_ACCEPTED)
-async def process_video_upload(file: UploadFile = File(...)):
+async def process_video_upload(file: UploadFile = File(...), language: str = Form("auto")):
+    if (bad_language := _language_error(language)) is not None:
+        return bad_language
+
     # Stream and validate the file upload to disk in chunks
     try:
         saved_path = await save_uploaded_file(file)
@@ -454,7 +486,8 @@ async def process_video_upload(file: UploadFile = File(...)):
     if getattr(worker_pool, "synchronous", False):
         try:
             update_job(job_id, status="processing", progress=5, message="Queued")
-            clip_names = await _run_pipeline(video_url=None, video_path=saved_path, job_id=job_id)
+            clip_names = await _run_pipeline(video_url=None, video_path=saved_path, job_id=job_id,
+                                             language_mode=language)
             update_job(job_id, status="completed", progress=100, message="Completed successfully", clips=clip_names)
         except Exception as exc:
             update_job(job_id, status="error", error=_job_error_message(exc), message="Processing failed")
@@ -468,7 +501,7 @@ async def process_video_upload(file: UploadFile = File(...)):
 
     def _background_run():
         update_job(job_id, status="processing", progress=5, message="Queued")
-        _run_background_job(job_id, video_url=None, video_path=saved_path)
+        _run_background_job(job_id, video_url=None, video_path=saved_path, language_mode=language)
 
     # Submit job task to worker pool queue
     queued = worker_pool.submit_job(job_id, _background_run)

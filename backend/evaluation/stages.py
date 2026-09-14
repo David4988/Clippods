@@ -6,7 +6,7 @@ are exactly what the legacy pipeline would have produced:
 
     probe       ffprobe metadata of the source media
     audio       16 kHz mono PCM WAV via services.audio_extraction.extract_audio
-    transcript  services.transcription.transcribe (legacy "base" configuration)
+    transcript  services.transcription.transcribe_rich (ASR profile + language mode)
 
 Each stage declares STAGE_VERSION and a config dict; both feed the cache key.
 If a production function's behaviour changes, bump the stage version (or its
@@ -81,51 +81,52 @@ def run_audio(cache: StageCache, media_path: Path, media_sha256: str) -> CacheRe
 
 
 # ---------------------------------------------------------------------------
-# transcript (legacy ASR configuration)
+# transcript (rich contract; profile + language mode are part of the key)
 # ---------------------------------------------------------------------------
 
-TRANSCRIPT_LEGACY_VERSION = "1"
-# Mirrors services/transcription.py as of Phase 0. The legacy function takes no
-# language argument, so a manifest's language_mode is NOT honoured here.
-LEGACY_ASR_CONFIG = {
-    "impl": "services.transcription.transcribe",
-    "engine": "faster-whisper",
-    "model": "base",
-    "device": "cpu",
-    "compute_type": "int8",
-    "beam_size": 5,
-    "language": None,
-    "vad_filter": False,
-    "word_timestamps": False,
-}
+TRANSCRIPT_VERSION = "3"
 
 
-def run_transcript_legacy(cache: StageCache, audio: CacheResult, audio_duration_s: float) -> CacheResult:
+def run_transcript(cache: StageCache, audio: CacheResult, profile_name: str, language_mode: str) -> CacheResult:
+    """
+    services.transcription.transcribe_rich with the given ASR profile.
+
+    The "legacy" profile decodes exactly like the original pipeline, so
+    legacy_v2 fed `legacy_segments()` reproduces historical selections.
+    """
+    from dataclasses import asdict
+    from services import transcription
+
+    profile = transcription.get_profile(profile_name)
+
     def build(work: Path) -> dict:
-        from services import transcription
-
-        # The production function silently returns a stub transcript when the
-        # model cannot load. Never let that be cached as a real result.
-        if transcription.get_model() is None:
-            raise StageError("Faster-Whisper model is unavailable; refusing to record a stub transcript.")
-
+        # transcribe_rich raises on an unavailable model; nothing fake is ever cached.
         with Measure() as m:
-            result = transcription.transcribe(str(audio.path / "audio.wav"))
-        write_json(work / "transcript.json", result)
-        segments = result["segments"]
+            transcript = transcription.transcribe_rich(
+                str(audio.path / "audio.wav"), profile=profile, language_mode=language_mode)
+        write_json(work / "transcript.json", transcript.to_dict())
+        quality = transcript.quality
         return {
             **m.as_dict(),
-            "segment_count": len(segments),
-            "speech_s": round(sum(s["end"] - s["start"] for s in segments), 3),
-            "real_time_factor": round(m.wall_s / audio_duration_s, 4) if audio_duration_s else None,
+            "segment_count": quality.segment_count,
+            "word_count": quality.word_count,
+            "language": transcript.language.language,
+            "language_probability": transcript.language.probability,
+            "language_uncertain": transcript.language.uncertain,
+            "quality_status": quality.status,
+            "hallucination_suspect_segments": quality.hallucination_suspect_segments,
+            "low_confidence_segments": quality.low_confidence_segments,
+            "speech_coverage": quality.speech_coverage,
+            "real_time_factor": round(m.wall_s / transcript.audio_duration, 4) if transcript.audio_duration else None,
         }
 
-    config = {**LEGACY_ASR_CONFIG,
+    config = {"impl": "services.transcription.transcribe_rich", "profile": asdict(profile),
+              "language_mode": language_mode,
               "faster_whisper": _package_version("faster-whisper"),
               "ctranslate2": _package_version("ctranslate2")}
-    return cache.get_or_build("transcript_legacy", TRANSCRIPT_LEGACY_VERSION,
-                              {"audio_key": audio.key}, config, build)
+    return cache.get_or_build("transcript", TRANSCRIPT_VERSION, {"audio_key": audio.key}, config, build)
 
 
-def load_transcript(result: CacheResult) -> dict:
-    return read_json(result.path / "transcript.json")
+def load_transcript(result: CacheResult):
+    from services.transcript import Transcript
+    return Transcript.from_dict(read_json(result.path / "transcript.json"))
