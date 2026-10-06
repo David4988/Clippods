@@ -43,7 +43,8 @@ from services.audio_extraction import extract_audio
 from services.clip_generation import generate_clips
 from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
-from services.transcript import LANGUAGE_MODES
+from services.asr_pipeline import transcribe_adaptive
+from services.transcript import LANGUAGE_MODES, LANGUAGE_SELECTIONS
 from services.transcription import transcribe_rich
 from utils import cleanup_file, cleanup_temp_artifacts, write_json_atomic
 from config import KEEP_ORIGINAL_FOR_DEBUG
@@ -63,10 +64,12 @@ class VideoUrlRequest(BaseModel):
 
 
 def _language_error(language: str) -> Optional[JSONResponse]:
-    if language not in LANGUAGE_MODES:
+    # "mixed" only has a meaning for the adaptive pipeline's per-language profiles.
+    allowed = LANGUAGE_SELECTIONS if config.ASR_PROFILE == "adaptive_v1" else LANGUAGE_MODES
+    if language not in allowed:
         return JSONResponse(
             status_code=400,
-            content={"error": f"language must be one of: {', '.join(LANGUAGE_MODES)}"},
+            content={"error": f"language must be one of: {', '.join(allowed)}"},
         )
     return None
 
@@ -192,10 +195,15 @@ async def _run_pipeline(
         if job_id is not None:
             update_job(job_id, status="transcribing", progress=60, message="Transcribing audio...")
         with trace.stage("transcribe"):
-            transcript = await asyncio.to_thread(
-                transcribe_rich, audio_path,
-                job_id=job_id, profile=config.ASR_PROFILE, language_mode=language_mode,
-            )
+            if config.ASR_PROFILE == "adaptive_v1":
+                transcript = await asyncio.to_thread(
+                    transcribe_adaptive, audio_path, job_id=job_id, language=language_mode,
+                )
+            else:
+                transcript = await asyncio.to_thread(
+                    transcribe_rich, audio_path,
+                    job_id=job_id, profile=config.ASR_PROFILE, language_mode=language_mode,
+                )
         # legacy_v2 consumes the original start/end/text view of the transcript.
         segments = transcript.legacy_segments()
 

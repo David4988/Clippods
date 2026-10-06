@@ -92,6 +92,22 @@ PROFILES: dict[str, AsrProfile] = {
                           script_aware_compression=True),
 }
 
+# Per-language decode profiles for the adaptive pipeline (services/asr_pipeline.py).
+# All are rich_v1 + a model choice; the names are versioned so a transcript records
+# exactly which settings produced it. Evidence: EV-3.1 (base good on English),
+# EV-3.2/3.11 (large-v3 needed for Hindi/Tamil), EV-3.13 (previous-text conditioning
+# keeps the code-switch script convention, so attempt 1 keeps it ON; the retry flips it).
+_RICH = PROFILES["rich_v1"]
+PROFILES.update({
+    "en_v1": replace(_RICH, name="en_v1", model="base"),
+    "hi_v1": replace(_RICH, name="hi_v1", model="large-v3"),
+    "ta_v1": replace(_RICH, name="ta_v1", model="large-v3"),
+    # Conservative for code-switched/uncertain speech: temperature fallback capped at
+    # 0.4 because unconstrained fallback to T=1.0 produced word salad with foreign
+    # tokens (EV-3.3). Provisional: not yet measured as a whole profile.
+    "mixed_v1": replace(_RICH, name="mixed_v1", model="large-v3", temperature=(0.0, 0.2, 0.4)),
+})
+
 # Whisper's compression ratio is gzip over UTF-8 bytes; clean text in these
 # scripts already exceeds the 2.4 trigger (EV-2.4), so it misfires as "repetition".
 NON_LATIN_SCRIPT_LANGUAGES = ("hi", "ta")
@@ -188,11 +204,14 @@ def transcribe_rich(
     job_id: str | None = None,
     profile: AsrProfile | str = "legacy",
     language_mode: str = "auto",
+    prepared: "PreparedAudio | None" = None,
 ) -> Transcript:
     """
     Transcribe *audio_path* in its spoken language and return a Transcript.
 
     language_mode: "auto" (detect) or a forced "en" | "hi" | "ta".
+    prepared: decoded audio, speech regions and probes already measured by the
+    caller (adaptive pipeline), so they are not computed twice.
     Failures raise (see transcribe()); a transcript is never fabricated.
     """
     from services import transcript_quality
@@ -227,6 +246,9 @@ def transcribe_rich(
         audio = None
         speech = None
         probes: list[LanguageProbe] = []
+        if prepared is not None:
+            audio, speech, probes = prepared.audio, prepared.speech, list(prepared.probes)
+            needs_audio = False
 
         try:
             if needs_audio:
@@ -235,14 +257,14 @@ def transcribe_rich(
                 audio = decode_audio(str(src), sampling_rate=16000)
                 timings["decode_audio_s"] = round(time.perf_counter() - t0, 3)
 
-            if profile.speech_regions:
+            if profile.speech_regions and prepared is None:
                 _raise_if_cancelled(job_id)
                 t0 = time.perf_counter()
                 from services.speech_regions import detect_speech_regions
                 speech = detect_speech_regions(audio)
                 timings["speech_regions_s"] = round(time.perf_counter() - t0, 3)
 
-            if profile.language_probes > 0:
+            if profile.language_probes > 0 and prepared is None:
                 _raise_if_cancelled(job_id)
                 t0 = time.perf_counter()
                 probes = _probe_languages(model, audio, speech, profile.language_probes)
@@ -250,7 +272,6 @@ def transcribe_rich(
 
             decode_language = None if language_mode == "auto" else language_mode
             detection = None
-            decode_options = _non_default_decode_options(profile)
             if profile.script_aware_compression:
                 if pre_detect:
                     _raise_if_cancelled(job_id)
@@ -265,33 +286,13 @@ def transcribe_rich(
                     detection = (detected, probability, all_probs)
                     decode_language = detected
                     timings["language_detection_s"] = round(time.perf_counter() - t0, 3)
-                if decode_language in NON_LATIN_SCRIPT_LANGUAGES:
-                    decode_options["compression_ratio_threshold"] = None
+            decode_options = decode_options_for(profile, decode_language)
 
             _raise_if_cancelled(job_id)
             t0 = time.perf_counter()
-            segments_generator, info = model.transcribe(
-                audio if audio is not None else str(src),
-                task="transcribe",
-                language=decode_language,
-                beam_size=profile.beam_size,
-                word_timestamps=profile.word_timestamps,
-                vad_filter=profile.vad_filter,
-                vad_parameters=profile.vad_parameters,
-                condition_on_previous_text=profile.condition_on_previous_text,
-                language_detection_segments=profile.language_detection_segments,
-                **decode_options,
-            )
+            segments, info = _decode(model, audio if audio is not None else str(src), profile,
+                                     decode_language, decode_options, job_id)
             total_duration = getattr(info, "duration", None)
-            segments: list[TranscriptSegment] = []
-            last_progress = None
-
-            # Decoding happens lazily while iterating; keep it inside this boundary.
-            for raw in segments_generator:
-                if raw.start is not None and raw.end is not None:
-                    segments.append(_segment_from(raw, len(segments), profile.word_timestamps))
-                if job_id is not None:
-                    last_progress = _report_progress(job_id, raw.end, total_duration, last_progress)
             timings["decode_s"] = round(time.perf_counter() - t0, 3)
         except HTTPException:
             raise
@@ -345,6 +346,71 @@ def transcribe_rich(
 
 
 # ---------------------------------------------------------------------------
+# shared decode (full file and adaptive-pipeline regions)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PreparedAudio:
+    """Measurements the adaptive pipeline takes once and shares across attempts."""
+    audio: object                           # float32 mono 16 kHz numpy array
+    speech: Optional[object]                # SpeechRegions
+    probes: list[LanguageProbe]
+
+
+def decode_options_for(profile: AsrProfile, language: Optional[str]) -> dict:
+    """Decode options beyond the fixed ones, including the script-aware override."""
+    options = _non_default_decode_options(profile)
+    if profile.script_aware_compression and language in NON_LATIN_SCRIPT_LANGUAGES:
+        options["compression_ratio_threshold"] = None
+    return options
+
+
+def _decode(model, source, profile: AsrProfile, language: Optional[str], decode_options: dict,
+            job_id: str | None, offset: float = 0.0) -> tuple[list[TranscriptSegment], object]:
+    """
+    Run the decoder on *source* (path or audio array) and collect contract segments.
+    *offset* shifts segment and word times, so a decoded region lands in whole-file time.
+    """
+    segments_generator, info = model.transcribe(
+        source,
+        task="transcribe",
+        language=language,
+        beam_size=profile.beam_size,
+        word_timestamps=profile.word_timestamps,
+        vad_filter=profile.vad_filter,
+        vad_parameters=profile.vad_parameters,
+        condition_on_previous_text=profile.condition_on_previous_text,
+        language_detection_segments=profile.language_detection_segments,
+        **decode_options,
+    )
+    total_duration = getattr(info, "duration", None)
+    segments: list[TranscriptSegment] = []
+    last_progress = None
+
+    # Decoding happens lazily while iterating; keep it inside the caller's error boundary.
+    for raw in segments_generator:
+        if raw.start is not None and raw.end is not None:
+            segments.append(_segment_from(raw, len(segments), profile.word_timestamps, offset))
+        if job_id is not None:
+            last_progress = _report_progress(job_id, raw.end, total_duration, last_progress)
+    return segments, info
+
+
+def prepare_audio(audio_path: str, probe_model, probe_count: int = 8,
+                  job_id: str | None = None) -> PreparedAudio:
+    """Decode audio once, measure speech regions and run language probes."""
+    from faster_whisper import decode_audio
+    from services.speech_regions import detect_speech_regions
+
+    audio = decode_audio(str(audio_path), sampling_rate=16000)
+    _raise_if_cancelled(job_id)
+    speech = detect_speech_regions(audio)
+    _raise_if_cancelled(job_id)
+    probes = _probe_languages(probe_model, audio, speech, probe_count) if probe_count > 0 else []
+    return PreparedAudio(audio=audio, speech=speech, probes=probes)
+
+
+# ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
@@ -363,11 +429,11 @@ def _float(value) -> Optional[float]:
     return None if value is None else round(float(value), 4)
 
 
-def _segment_from(raw, index: int, with_words: bool) -> TranscriptSegment:
+def _segment_from(raw, index: int, with_words: bool, offset: float = 0.0) -> TranscriptSegment:
     words = None
     if with_words:
         words = [
-            Word(start=round(float(w.start), 3), end=round(float(w.end), 3), text=w.word,
+            Word(start=round(float(w.start) + offset, 3), end=round(float(w.end) + offset, 3), text=w.word,
                  probability=_float(getattr(w, "probability", None)))
             for w in (getattr(raw, "words", None) or [])
             if w.start is not None and w.end is not None
@@ -375,8 +441,8 @@ def _segment_from(raw, index: int, with_words: bool) -> TranscriptSegment:
     tokens = getattr(raw, "tokens", None)
     return TranscriptSegment(
         id=index,
-        start=float(raw.start),
-        end=float(raw.end),
+        start=round(float(raw.start) + offset, 3) if offset else float(raw.start),
+        end=round(float(raw.end) + offset, 3) if offset else float(raw.end),
         text=(raw.text or "").strip(),
         avg_logprob=_float(getattr(raw, "avg_logprob", None)),
         compression_ratio=_float(getattr(raw, "compression_ratio", None)),

@@ -34,6 +34,19 @@ Segment flags
 Transcript status is "degraded" (never silently "ok") when the language is
 uncertain, > 20 % of segments are hallucination suspects, or usable segments
 cover < 50 % of measured speech.
+
+Quality gate (adaptive pipeline, `gate()`): turns the flags above into a decision
+(ok | degraded | hard_fail) and a list of suspicious spans worth one regional retry.
+A span is suspicious only on genuinely strong evidence:
+  * a segment with any hallucination-class flag, or
+  * a segment with weak signals from 2+ independent families (window confidence,
+    word confidence, script, timing). One weak signal never counts; mixed_script
+    never counts, so ordinary code-switching is not punished.
+  * untranscribed speech: >= 4 s of VAD speech not covered by any trusted word
+    (normal-length words from non-suspicious segments). This catches dropped
+    speech hidden inside segments whose start/end stretch over it (EV-3.12).
+Language disagreement is a transcript-level reason (degraded), never a region:
+re-decoding a region cannot fix a wrong language selection.
 """
 from __future__ import annotations
 
@@ -46,6 +59,8 @@ from services.transcript import (
     SUPPORTED_LANGUAGES,
     LanguageInfo,
     SpeechRegions,
+    SuspiciousSpan,
+    Transcript,
     TranscriptQuality,
     TranscriptSegment,
 )
@@ -202,6 +217,8 @@ def assess_language(info: LanguageInfo) -> None:
                 others = {k: v for k, v in votes.items() if k != majority}
                 reasons.append(f"language probes disagree across the file: {dict(votes)} "
                                f"(possible code-switching or misdetection; other: {others})")
+    elif info.mode == "mixed":
+        pass  # code-switched speech: probes are expected to disagree
     elif info.probes:
         votes = Counter(p.language for p in info.probes)
         majority, count = votes.most_common(1)[0]
@@ -276,3 +293,128 @@ def _merge(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
         else:
             merged.append([a, b])
     return [(a, b) for a, b in merged]
+
+
+# ---------------------------------------------------------------------------
+# quality gate (adaptive pipeline)
+# ---------------------------------------------------------------------------
+
+GATE_THRESHOLDS = {
+    "weak_families_min": 2,
+    "untranscribed_speech_min_s": 4.0,
+    "untranscribed_join_gap_s": 1.0,
+    "trusted_word_max_duration_s": 2.0,
+    "trusted_word_pad_s": 0.5,
+    "hard_fail_trusted_coverage_max": 0.25,
+    "min_speech_s": 5.0,
+}
+
+# Weak-signal families. Window-level fields (logprob, no-speech, temperature) are
+# copied onto every segment of a ~30 s decode window, so they count as ONE family.
+WEAK_FAMILIES = {
+    "window_confidence": {"low_avg_logprob", "high_no_speech_prob", "temperature_fallback"},
+    "word_confidence": {"low_word_probability"},
+    "script": {"script_mismatch"},
+    "timing": set(TIMING_FLAGS),
+}
+
+
+def segment_suspicion(seg: TranscriptSegment) -> list[str]:
+    """Reasons the gate distrusts this segment's text; [] when it is trusted."""
+    strong = [f for f in seg.flags if f in HALLUCINATION_FLAGS]
+    if strong:
+        return strong
+    families = sorted(name for name, members in WEAK_FAMILIES.items() if members & set(seg.flags))
+    if len(families) >= GATE_THRESHOLDS["weak_families_min"]:
+        return [f"weak:{name}" for name in families]
+    return []
+
+
+def trusted_coverage(segments: list[TranscriptSegment], speech: SpeechRegions) -> list[tuple[float, float]]:
+    """Time spans backed by trusted text (padded words, or segment spans without words)."""
+    g = GATE_THRESHOLDS
+    spans = []
+    for seg in segments:
+        if not seg.text or segment_suspicion(seg):
+            continue
+        if seg.words is None:
+            spans.append((seg.start, seg.end))
+            continue
+        for w in seg.words:
+            # Abnormally long words are alignment artefacts stretched over audio
+            # the decoder skipped (EV-3.9/3.12); they are not evidence of coverage.
+            if 0 < w.end - w.start <= g["trusted_word_max_duration_s"]:
+                spans.append((w.start - g["trusted_word_pad_s"], w.end + g["trusted_word_pad_s"]))
+    return _merge(spans)
+
+
+def untranscribed_speech(segments: list[TranscriptSegment], speech: SpeechRegions) -> list[tuple[float, float, float]]:
+    """(start, end, speech_seconds) for runs of measured speech with no trusted text."""
+    g = GATE_THRESHOLDS
+    covered = trusted_coverage(segments, speech)
+    gaps: list[list[float]] = []
+    for r_start, r_end in speech.regions:
+        cursor = r_start
+        for c_start, c_end in covered:
+            if c_end <= cursor or c_start >= r_end:
+                continue
+            if c_start > cursor:
+                gaps.append([cursor, c_start])
+            cursor = max(cursor, c_end)
+        if cursor < r_end:
+            gaps.append([cursor, r_end])
+
+    runs: list[list[float]] = []
+    for a, b in gaps:
+        if runs and a - runs[-1][1] <= g["untranscribed_join_gap_s"]:
+            runs[-1][1] = b
+            runs[-1][2] += b - a
+        else:
+            runs.append([a, b, b - a])
+    return [(round(a, 3), round(b, 3), round(sec, 3)) for a, b, sec in runs
+            if sec >= g["untranscribed_speech_min_s"]]
+
+
+def suspicious_spans(segments: list[TranscriptSegment], speech: SpeechRegions | None) -> list[SuspiciousSpan]:
+    spans: list[SuspiciousSpan] = []
+    for seg in segments:
+        reasons = segment_suspicion(seg)
+        if reasons:
+            spans.append(SuspiciousSpan(start=seg.start, end=seg.end, reasons=reasons, segment_ids=[seg.id]))
+    if speech is not None:
+        suspect = _merge([(sp.start, sp.end) for sp in spans])
+        for start, end, seconds in untranscribed_speech(segments, speech):
+            # Speech under an already-suspicious segment is explained by that segment.
+            unexplained = seconds - sum(
+                overlap_seconds(max(a, start), min(b, end), speech.regions)
+                for a, b in suspect if b > start and a < end)
+            if unexplained < GATE_THRESHOLDS["untranscribed_speech_min_s"]:
+                continue
+            ids = [s.id for s in segments if s.start < end and s.end > start]
+            spans.append(SuspiciousSpan(start=start, end=end,
+                                        reasons=[f"untranscribed_speech:{seconds:.1f}s"], segment_ids=ids))
+    return sorted(spans, key=lambda sp: (sp.start, sp.end))
+
+
+def gate(transcript: Transcript) -> tuple[str, list[str], list[SuspiciousSpan]]:
+    """
+    Decide ok | degraded | hard_fail and list suspicious spans.
+
+    hard_fail: measured speech exists but trusted text covers < 25 % of it.
+    degraded:  any suspicious span, or a transcript-level reason from summarise()
+               (language disagreement, suspect ratio, low coverage).
+    """
+    g = GATE_THRESHOLDS
+    speech = transcript.speech_regions
+    spans = suspicious_spans(transcript.segments, speech)
+    reasons = list(transcript.quality.reasons)
+    if spans:
+        reasons.append(f"{len(spans)} suspicious span(s)")
+
+    if speech is not None and speech.speech_seconds >= g["min_speech_s"]:
+        covered = trusted_coverage(transcript.segments, speech)
+        trusted = sum(overlap_seconds(a, b, speech.regions) for a, b in covered)
+        share = trusted / speech.speech_seconds
+        if share < g["hard_fail_trusted_coverage_max"]:
+            return "hard_fail", reasons + [f"trusted text covers {share:.0%} of measured speech"], spans
+    return ("degraded" if reasons else "ok"), reasons, spans

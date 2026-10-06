@@ -34,6 +34,9 @@ from typing import Any, Optional
 SCHEMA = "clippods-transcript/1"
 SUPPORTED_LANGUAGES = ("en", "hi", "ta")
 LANGUAGE_MODES = ("auto",) + SUPPORTED_LANGUAGES
+# What a user can select for the adaptive pipeline: "mixed" means code-switched
+# speech (e.g. Hinglish/Tanglish) decoded with the conservative mixed profile.
+LANGUAGE_SELECTIONS = LANGUAGE_MODES + ("mixed",)
 
 
 @dataclass
@@ -63,6 +66,7 @@ class TranscriptSegment:
     hallucination_suspect: bool = False    # the TEXT may not have been spoken
     timing_suspect: bool = False           # the text may be real but its start/end are not trustworthy
     low_confidence: bool = False
+    attempt: int = 1                       # which AsrAttempt produced this text (Transcript.attempts)
 
     @property
     def usable(self) -> bool:
@@ -120,6 +124,39 @@ class TranscriptQuality:
 
 
 @dataclass
+class SuspiciousSpan:
+    """A stretch of the transcript the quality gate does not trust."""
+    start: float
+    end: float
+    reasons: list[str]
+    segment_ids: list[int]                 # ids at the time the gate ran
+
+
+@dataclass
+class AsrAttempt:
+    """
+    One decode that contributed to a transcript. `segment.attempt` points here,
+    so "which model/config produced this text, and why was it retried" is
+    answered by Transcript.attempts[segment.attempt - 1].
+    """
+    attempt: int
+    scope: str                             # full | region
+    model: str
+    profile: str
+    condition_on_previous_text: bool
+    language: str                          # language passed to the decoder
+    region: Optional[tuple[float, float]]  # region attempts only (seconds, whole-file time)
+    retry_reasons: list[str]               # why the region was retried (region attempts only)
+    trigger_spans: list[SuspiciousSpan]    # gate spans that produced this region
+    quality_status: str                    # full: gate status; region: resolved | still_suspicious
+    outcome: Optional[str]                 # region: accepted | rejected; full: None
+    segment_count: int                     # segments this attempt decoded
+    decode_s: float
+    metrics: dict[str, Any] = field(default_factory=dict)
+    replaced: list[dict[str, Any]] = field(default_factory=list)  # attempt-1 text an accepted region replaced
+
+
+@dataclass
 class Transcript:
     schema: str
     asr: dict[str, Any]                    # profile, model, decode options, library versions
@@ -129,6 +166,9 @@ class Transcript:
     speech_regions: Optional[SpeechRegions]
     quality: TranscriptQuality
     timings: dict[str, float]
+    # Adaptive pipeline only (empty for single-decode profiles).
+    attempts: list[AsrAttempt] = field(default_factory=list)
+    suspicious_spans: list[SuspiciousSpan] = field(default_factory=list)  # final gate result
 
     # -- views -------------------------------------------------------------
 
@@ -147,6 +187,11 @@ class Transcript:
             "audio_duration": self.audio_duration,
             "language": asdict(self.language),
             "quality": asdict(self.quality),
+            "attempts": [
+                {k: v for k, v in asdict(a).items() if k not in ("replaced", "trigger_spans")}
+                for a in self.attempts
+            ],
+            "suspicious_spans": [asdict(span) for span in self.suspicious_spans],
             "speech_regions": None if self.speech_regions is None else {
                 "method": self.speech_regions.method,
                 "params": self.speech_regions.params,
@@ -182,4 +227,14 @@ class Transcript:
             ),
             quality=TranscriptQuality(**data["quality"]),
             timings=data["timings"],
+            attempts=[_attempt_from(a) for a in data.get("attempts", [])],
+            suspicious_spans=[SuspiciousSpan(**span) for span in data.get("suspicious_spans", [])],
         )
+
+
+def _attempt_from(data: dict) -> AsrAttempt:
+    return AsrAttempt(**{
+        **data,
+        "region": None if data["region"] is None else tuple(data["region"]),
+        "trigger_spans": [SuspiciousSpan(**span) for span in data["trigger_spans"]],
+    })

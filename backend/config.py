@@ -85,9 +85,11 @@ JOB_RECORD_TTL_HOURS = float(os.environ.get("JOB_RECORD_TTL_HOURS", "24.0"))
 # "legacy" decodes exactly as the original pipeline (legacy_v2 output unchanged)
 # while recording language/confidence metadata, speech regions and quality flags.
 # "rich_v1" adds word timestamps + VAD filtering, which can change segments.
+# "adaptive_v1" selects a per-language profile, gates quality and retries only
+# suspicious regions once (services/asr_pipeline.py). Opt-in; not the default.
 ASR_PROFILE = os.environ.get("ASR_PROFILE", "legacy")
-if ASR_PROFILE not in ("legacy", "rich_v1"):
-    raise ValueError(f"ASR_PROFILE must be 'legacy' or 'rich_v1', got {ASR_PROFILE!r}")
+if ASR_PROFILE not in ("legacy", "rich_v1", "adaptive_v1"):
+    raise ValueError(f"ASR_PROFILE must be 'legacy', 'rich_v1' or 'adaptive_v1', got {ASR_PROFILE!r}")
 
 # 7. Input limits
 MAX_VIDEO_DURATION_SECONDS = float(os.environ.get("MAX_VIDEO_DURATION_SECONDS", str(120 * 60)))
