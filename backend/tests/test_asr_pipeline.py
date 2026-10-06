@@ -145,8 +145,15 @@ def probes_of(*languages):
 def test_manual_language_selects_its_profile(selection, profile, model):
     choice = select_profile(selection, BOTH)
     assert (choice.profile.name, choice.profile.model) == (profile, model)
-    assert choice.profile.condition_on_previous_text is True
+    # CP3/D25: Tamil attempt 1 runs previous-text OFF; the others keep it ON.
+    assert choice.profile.condition_on_previous_text is (selection != "ta")
     assert choice.decode_language == (None if selection == "mixed" else selection)
+
+
+def test_tamil_attempt1_is_previous_text_off_and_its_retry_flips_it_on():
+    ta = transcription.PROFILES["ta_v1"]
+    assert ta.condition_on_previous_text is False          # D25
+    assert retry_profile_for(ta, BOTH).condition_on_previous_text is True
 
 
 def test_profiles_are_named_versioned_and_rich():
@@ -352,6 +359,95 @@ def test_retry_profile_is_none_without_large_v3_for_base():
 
 
 # ---------------------------------------------------------------------------
+# CP3 policies: bounded regions (D26), retry budget (D28), acceptance (D27)
+# ---------------------------------------------------------------------------
+
+def test_oversized_region_is_refused_not_split():
+    long_speech = [(1.0, 290.0)]
+    segments = [seg(0, 1.0, 290.0, LOOP)]
+    [r] = build_retry_regions([span(5.0, 280.0)], segments, long_speech, 300.0)
+    assert r.seconds > asr_pipeline.REGION_PARAMS["max_region_s"]
+    assert r.skip_reason == "too_large"
+
+    to_retry, skipped = asr_pipeline.plan_retries([r], segments, long_speech,
+                                                  speech_regions(long_speech, 300.0), 300.0)
+    assert to_retry == [] and skipped == [r]
+
+
+def test_retry_budget_spends_on_the_most_suspicious_regions_first():
+    speech = [(0.0, 1000.0)]
+    segments = [seg(0, 20.0, 100.0, LOOP), seg(1, 320.0, 400.0, "clean words here and there")]
+    quiet = RetryRegion(310.0, 410.0, [span(320.0, 400.0)])
+    loud = RetryRegion(10.0, 110.0, [span(20.0, 100.0)])
+    speech_obj = speech_regions(speech, 1000.0)
+    transcript_quality.flag_segments(segments, "en", 1000.0, speech_obj)
+
+    # Budget is 0.30 x 1000 s = 300 s, so both 100 s regions fit.
+    to_retry, skipped = asr_pipeline.plan_retries([quiet, loud], segments, speech, speech_obj, 1000.0)
+    assert [r.start for r in to_retry] == [10.0, 310.0] and skipped == []
+
+    # With a 0.15 budget (150 s) only the most suspicious region is affordable.
+    quiet.skip_reason = loud.skip_reason = None
+    to_retry, skipped = asr_pipeline.plan_retries([quiet, loud], segments, speech, speech_obj, 1000.0,
+                                                  budget_fraction=0.15)
+    assert [r.start for r in to_retry] == [10.0]
+    assert [r.skip_reason for r in skipped] == ["budget_exhausted"]
+
+
+def test_budget_has_a_floor_so_short_inputs_still_get_one_region():
+    assert asr_pipeline.RETRY_BUDGET_MIN_S == asr_pipeline.REGION_PARAMS["max_region_s"]
+    speech = [(0.0, 60.0)]
+    segments = [seg(0, 10.0, 40.0, LOOP)]
+    region = RetryRegion(10.0, 40.0, [span(10.0, 40.0)])
+    speech_obj = speech_regions(speech, 60.0)
+    to_retry, skipped = asr_pipeline.plan_retries([region], segments, speech, speech_obj, 60.0)
+    assert to_retry == [region] and skipped == []          # 0.30 x 60 s = 18 s < 30 s region
+
+
+def test_unretried_regions_are_recorded_and_degrade_the_transcript(monkeypatch, audio_file):
+    calls = []
+    models = {"base": ScriptedModel("base", calls, full=LOOP_FULL),
+              "large-v3": ScriptedModel("large-v3", calls, region=GOOD_REGION)}
+    monkeypatch.setitem(asr_pipeline.REGION_PARAMS, "max_region_s", 5.0)   # force "too_large"
+    t = run(monkeypatch, audio_file, language="en", models=models)
+
+    assert len(calls) == 1                                  # nothing retried
+    assert t.quality.status == "still_degraded"
+    skipped = t.asr["pipeline"]["skipped_regions"]
+    assert skipped and all(r["reason"] == "too_large" for r in skipped)
+    assert any("not retried by policy" in r for r in t.quality.reasons)
+
+
+def test_acceptance_rejects_a_retry_that_transliterates_embedded_english():
+    # D27(c): Hinglish (half Latin) replaced by the same content in Devanagari.
+    before = {"trusted_speech_s": 40.0, "suspect_s": 1.0, "latin_share": 0.50}
+    after = {"trusted_speech_s": 42.0, "suspect_s": 0.0, "latin_share": 0.13}
+    accept, why = asr_pipeline._better(before, after)
+    assert accept is False and "code-switch regression" in why
+
+
+def test_acceptance_allows_script_change_when_attempt1_had_little_english():
+    before = {"trusted_speech_s": 10.0, "suspect_s": 20.0, "latin_share": 0.03}
+    after = {"trusted_speech_s": 30.0, "suspect_s": 2.0, "latin_share": 0.0}
+    accept, _ = asr_pipeline._better(before, after)
+    assert accept is True
+
+
+def test_acceptance_rejects_a_retry_that_adds_suspicion():
+    before = {"trusted_speech_s": 10.0, "suspect_s": 5.0, "latin_share": 0.0}
+    after = {"trusted_speech_s": 20.0, "suspect_s": 9.0, "latin_share": 0.0}
+    accept, why = asr_pipeline._better(before, after)
+    assert accept is False and "suspect seconds grew" in why
+
+
+def test_acceptance_still_requires_trusted_text():
+    before = {"trusted_speech_s": 10.0, "suspect_s": 20.0, "latin_share": 0.0}
+    empty = {"trusted_speech_s": 0.0, "suspect_s": 0.0, "latin_share": 0.0}
+    accept, why = asr_pipeline._better(before, empty)
+    assert accept is False and "no gain" in why
+
+
+# ---------------------------------------------------------------------------
 # end to end: retry, cap, provenance
 # ---------------------------------------------------------------------------
 
@@ -447,6 +543,7 @@ def test_provenance_answers_what_produced_this_text_and_why(monkeypatch, audio_f
     assert retry.outcome == "accepted" and retry.quality_status == "resolved"
     assert [r["text"] for r in retry.replaced] == [LOOP, LOOP]
     assert retry.metrics["before"]["trusted_speech_s"] < retry.metrics["after"]["trusted_speech_s"]
+    assert "latin_share" in retry.metrics["before"] and retry.metrics["decision"]
 
     produced = [s for s in t.segments if s.attempt == 2]
     assert produced and all(t.attempts[s.attempt - 1].region == (20.0, 39.5) for s in produced)

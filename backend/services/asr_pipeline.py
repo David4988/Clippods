@@ -68,12 +68,31 @@ REGION_PARAMS = {
     "gap_margin_s": 0.25,      # boundary sits this far into the silence (or mid-gap if shorter)
     "min_region_s": 10.0,      # shorter regions decode with too little context
     "max_geometry_passes": 10, # expand/snap passes (geometry only, not decode attempts)
+    # CP3/D26: PROPOSED (unvalidated) bound. A longer region is not retried at all —
+    # it is never split into several decodes, which would spend the same compute under
+    # another name. Shaped by EV-4.5: every region >= 238 s stayed suspicious, every
+    # region that resolved was <= 81 s.
+    "max_region_s": 120.0,
 }
 
-# A retry replaces attempt 1 only if it is better for that region.
+# CP3/D28: PROPOSED (unvalidated). Total retried audio may not exceed this fraction
+# of the file, so a run costs at most ~1.3 decode passes instead of the 2.0 measured
+# on the 74-minute Tamil file (EV-4.6: 98 % re-decoded, 3 h 52 min).
+RETRY_BUDGET_FRACTION = 0.30
+# Floor so short inputs can still afford one bounded region (D26's max_region_s).
+# On a 74-minute file the fraction dominates, so the cap keeps its meaning.
+RETRY_BUDGET_MIN_S = REGION_PARAMS["max_region_s"]
+
+# CP3/D27: a retry replaces attempt 1 only when the region gains trusted speech AND
+# nothing regresses. Trusted speech alone accepted a transliteration drift (EV-4.3).
 ACCEPT_PARAMS = {
     "trusted_gain_min_s": 1.0,     # accept if trusted speech coverage grows by this much
     "trusted_loss_max_s": 1.0,     # or stays within this and suspect seconds shrink
+    # PROPOSED (unvalidated): when attempt 1 carries at least this much Latin text,
+    # the retry may not lose more than `latin_share_drop_max` of it. hi2's drift was
+    # 0.50 -> 0.13 (EV-4.3).
+    "code_switch_latin_min": 0.15,
+    "latin_share_drop_max": 0.15,
 }
 
 
@@ -180,6 +199,11 @@ class RetryRegion:
     end: float
     spans: list[SuspiciousSpan]
     notes: list[str] = field(default_factory=list)
+    skip_reason: Optional[str] = None   # set when policy refuses to retry this region
+
+    @property
+    def seconds(self) -> float:
+        return self.end - self.start
 
 
 def _snap_start(t: float, regions: list[tuple[float, float]], p: dict) -> tuple[float, bool]:
@@ -266,7 +290,40 @@ def build_retry_regions(spans: list[SuspiciousSpan], segments: list[TranscriptSe
             last.notes = sorted(set(last.notes + region.notes))
         else:
             merged.append(region)
+
+    # CP3/D26: oversized regions are recorded, not retried and not split.
+    for region in merged:
+        if region.seconds > p["max_region_s"]:
+            region.skip_reason = "too_large"
     return merged
+
+
+def plan_retries(regions: list[RetryRegion], segments: list[TranscriptSegment],
+                 speech_regions: list[tuple[float, float]], speech, audio_duration: float,
+                 budget_fraction: float = RETRY_BUDGET_FRACTION) -> tuple[list[RetryRegion], list[RetryRegion]]:
+    """
+    Apply the CP3 retry budget (D28): spend it on the most suspicious regions first.
+
+    Returns (to_retry in chronological order, skipped). Regions already refused by
+    D26 keep their reason; the rest are refused with `budget_exhausted`.
+    """
+    budget = max(budget_fraction * audio_duration, RETRY_BUDGET_MIN_S)
+    candidates = [r for r in regions if r.skip_reason is None]
+    ranked = sorted(
+        candidates,
+        key=lambda r: region_metrics(segments, speech_regions, r.start, r.end, speech)["suspect_s"],
+        reverse=True,
+    )
+    chosen: list[RetryRegion] = []
+    spent = 0.0
+    for region in ranked:
+        if spent + region.seconds > budget:
+            region.skip_reason = "budget_exhausted"
+            continue
+        chosen.append(region)
+        spent += region.seconds
+    skipped = [r for r in regions if r.skip_reason is not None]
+    return sorted(chosen, key=lambda r: r.start), skipped
 
 
 # ---------------------------------------------------------------------------
@@ -367,25 +424,45 @@ def region_metrics(segments: list[TranscriptSegment], speech_regions: list[tuple
     region_speech = overlap_seconds(start, end, speech_regions)
     suspect = sum(max(0.0, min(s.end, end) - max(s.start, start))
                   for s in inside if transcript_quality.segment_suspicion(s))
+    # Script mix of the region's text: a collapsing Latin share means embedded English
+    # was transliterated into the native script rather than kept as English (D27).
+    scripts = transcript_quality.script_shares(" ".join(s.text for s in inside))
     return {
         "speech_s": round(region_speech, 2),
         "trusted_speech_s": round(trusted, 2),
         "suspect_s": round(suspect, 2),
         "words": sum(len(s.words) if s.words is not None else len(s.text.split()) for s in inside),
+        "latin_share": round(scripts.get("latin", 0.0), 3),
+        "scripts": scripts,
     }
 
 
-def _better(before: dict, after: dict) -> bool:
+def _better(before: dict, after: dict) -> tuple[bool, str]:
     """
-    More trusted speech wins. Less suspicious text only wins if the retry still
-    produced trusted text: deleting a loop and leaving silence is not an improvement.
+    CP3/D27 acceptance. Returns (accept, reason).
+
+    More trusted speech wins, or less suspicious text when trusted speech survives.
+    Either way the retry must not increase suspect seconds and must not transliterate
+    embedded English into the native script (EV-4.3).
     """
     a = ACCEPT_PARAMS
     gain = after["trusted_speech_s"] - before["trusted_speech_s"]
-    if gain >= a["trusted_gain_min_s"]:
-        return True
-    return (gain >= -a["trusted_loss_max_s"] and after["suspect_s"] < before["suspect_s"]
-            and after["trusted_speech_s"] > 0)
+    improved = gain >= a["trusted_gain_min_s"] or (
+        gain >= -a["trusted_loss_max_s"] and after["suspect_s"] < before["suspect_s"]
+        and after["trusted_speech_s"] > 0
+    )
+    if not improved:
+        return False, (f"no gain (trusted {before['trusted_speech_s']}→{after['trusted_speech_s']}s, "
+                       f"suspect {before['suspect_s']}→{after['suspect_s']}s)")
+    if after["suspect_s"] > before["suspect_s"]:
+        return False, f"suspect seconds grew ({before['suspect_s']}→{after['suspect_s']}s)"
+    latin_before, latin_after = before["latin_share"], after["latin_share"]
+    if (latin_before >= a["code_switch_latin_min"]
+            and latin_after < latin_before - a["latin_share_drop_max"]):
+        return False, (f"code-switch regression: Latin share {latin_before:.2f}→{latin_after:.2f} "
+                       f"(embedded English transliterated into the native script)")
+    return True, (f"trusted {before['trusted_speech_s']}→{after['trusted_speech_s']}s, "
+                  f"suspect {before['suspect_s']}→{after['suspect_s']}s")
 
 
 def _reflag(segments: list[TranscriptSegment], transcript: Transcript) -> list[TranscriptSegment]:
@@ -464,7 +541,9 @@ def transcribe_adaptive(audio_path: str, *, job_id: str | None = None, language:
     retry_profile = retry_profile_for(choice.profile, available)
     speech = transcript.speech_regions
     speech_list = speech.regions if speech is not None else []
-    regions = build_retry_regions(spans1, transcript.segments, speech_list, transcript.audio_duration)
+    all_regions = build_retry_regions(spans1, transcript.segments, speech_list, transcript.audio_duration)
+    regions, skipped_regions = plan_retries(all_regions, transcript.segments, speech_list, speech,
+                                            transcript.audio_duration)
     retry_skipped = None
     retries_t0 = time.perf_counter()
     segments = transcript.segments
@@ -472,6 +551,10 @@ def transcribe_adaptive(audio_path: str, *, job_id: str | None = None, language:
 
     if regions and retry_profile is None:
         retry_skipped = f"no retry model available ({RETRY_MODEL} not present locally)"
+        for region in regions:
+            region.skip_reason = "no_retry_model"
+        skipped_regions = list(all_regions)
+        regions = []
     elif regions:
         if job_id is not None:
             from job_manager import update_job
@@ -479,6 +562,9 @@ def transcribe_adaptive(audio_path: str, *, job_id: str | None = None, language:
         retry_model = transcription.get_model(retry_profile.model, retry_profile.device, retry_profile.compute_type)
         if retry_model is None:
             retry_skipped = f"retry model {retry_profile.model} could not be loaded"
+            for region in regions:
+                region.skip_reason = "retry_model_unavailable"
+            skipped_regions = list(all_regions)
         for region in regions if retry_model is not None else []:
             transcription._raise_if_cancelled(job_id)
             number = len(attempts) + 1
@@ -502,12 +588,16 @@ def transcribe_adaptive(audio_path: str, *, job_id: str | None = None, language:
         record.quality_status = "still_suspicious" if remaining else "resolved"
         if remaining:
             still.append(record.attempt)
+    unretried = [r for r in skipped_regions if _still_suspicious(r, spans2)]
     if status2 == "hard_fail":
         final = "hard_fail"
-    elif still or retry_skipped:
+    elif still or retry_skipped or unretried:
         final = "still_degraded"
     else:
         final = status2
+    if unretried:
+        by_reason = Counter(r.skip_reason for r in unretried)
+        reasons2.append(f"{len(unretried)} suspicious region(s) not retried by policy: {dict(by_reason)}")
     if still:
         reasons2.append(f"retried region(s) still suspicious (attempts {still}); best result kept, no further retry")
     if retry_skipped:
@@ -528,9 +618,15 @@ def transcribe_adaptive(audio_path: str, *, job_id: str | None = None, language:
         "probe_model": probe_model_name,
         "retry_profile": None if retry_profile is None else asdict(retry_profile),
         "retry_skipped": retry_skipped,
-        "regions": len(regions),
+        "regions": len(all_regions),
         "retries": len(region_log),
+        "retried_seconds": round(sum(r.seconds for r in regions), 1),
+        "retry_budget_s": round(max(RETRY_BUDGET_FRACTION * transcript.audio_duration,
+                                    RETRY_BUDGET_MIN_S), 1),
+        "skipped_regions": [{"start": r.start, "end": r.end, "seconds": round(r.seconds, 1),
+                             "reason": r.skip_reason} for r in skipped_regions],
         "region_params": dict(REGION_PARAMS),
+        "retry_budget_fraction": RETRY_BUDGET_FRACTION,
         "accept_params": dict(ACCEPT_PARAMS),
         "auto_params": dict(AUTO_PARAMS),
         "gate_thresholds": dict(transcript_quality.GATE_THRESHOLDS),
@@ -597,7 +693,9 @@ def _retry_region(region: RetryRegion, number: int, model, profile: AsrProfile, 
     candidate = _reflag(candidate, transcript)
     after = region_metrics(candidate, speech_list, region.start, region.end, speech)
     record.metrics["after"] = after
-    if _better(before, after):
+    accept, why = _better(before, after)
+    record.metrics["decision"] = why
+    if accept:
         record.outcome = "accepted"
         record.replaced = [{"id": s.id, "attempt": s.attempt, "start": s.start, "end": s.end,
                             "text": s.text[:200], "flags": list(s.flags)} for s in removed]

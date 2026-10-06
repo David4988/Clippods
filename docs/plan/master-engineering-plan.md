@@ -2,8 +2,9 @@
 
 **Backend cleanup, transcription reliability, clip selection and boundary quality**
 
-Status: **Checkpoint 1 approved 2026-09-14 · Phase 0 in review**
+Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measurements complete · CP3 is the open gate (decisions below) · Phase 2 dataset not frozen**
 Investigation date: 2026-09-14 · Investigated at `bf7b0c9` (main)
+Last state update: 2026-10-06 · experimental `adaptive_v1` ASR stage committed at `c7719dc` (branch `asr-rich-contract`), opt-in only
 
 > This document is the approved plan. The **Decision Record** below is authoritative. Where it differs from the original proposals later in the document, the Decision Record wins. Sections 1–19 are otherwise kept as reviewed at Checkpoint 1, so the reasoning stays traceable.
 
@@ -36,6 +37,24 @@ Investigation date: 2026-09-14 · Investigated at `bf7b0c9` (main)
 | D22 | This plan lives at `docs/plan/master-engineering-plan.md`. |
 | D23 | Both legacy comparisons kept: `legacy_v2@3` (historical) and `legacy_v2@5` (fair 5-clip comparison). |
 | D24 | Fake 64-byte test output folder deleted (done in Phase 0). |
+
+## CP3 Decision Record (2026-10-06)
+
+Scope: the ASR/transcript foundation only. These decisions apply to the
+experimental `adaptive_v1` stage (`ASR_PROFILE=adaptive_v1`); production stays
+`legacy`. Every threshold is either traced to evidence below or explicitly marked
+**PROPOSED (unvalidated)** — a proposed value is a starting point to be measured,
+not a measured optimum.
+
+| ID | Decision | Status | Evidence |
+|---|---|---|---|
+| D25 | **Tamil attempt 1 uses `condition_on_previous_text=False`.** `ta_v1` switches ON → OFF; the regional retry then flips to ON, so the previous-text behaviour that helps Hindi is still reachable per region. Hindi (`hi_v1`) and `mixed_v1` keep ON for attempt 1. | **Decided from evidence** | EV-3.11 (ta1 44 → 138, ta2 15 → 87 trusted words/min ON → OFF; loop seconds 178 → 32 and 166 → 71), EV-4.4 (ON at full length = `hard_fail`, 1 785 spans). Hindi asymmetry from EV-3.11/EV-4.2 (hi2 ON clean, OFF regressed 228 → 142). |
+| D26 | **Retry regions are bounded.** A region longer than `max_region_s` is **not** retried: it is recorded as `not_retried_too_large` and the transcript ends `still_degraded`. Oversized regions are never split into several decodes — that would spend the same compute under another name. Value: **120 s, PROPOSED (unvalidated)**, shaped by EV-4.5: every region ≥ 238 s ended `still_suspicious`, while every region that `resolved` was ≤ 81 s. | **Decided (bound), value PROPOSED** | EV-4.5, EV-4.6 (regions up to 1 299 s; 98 % of a 74-min file re-decoded). |
+| D27 | **Retry acceptance requires more trusted speech AND no regression.** All must hold: (a) trusted speech in the region grows by ≥ 1 s, or stays within 1 s while suspect seconds fall and trusted speech is non-zero; (b) suspect seconds do not increase; (c) **code-switch preservation** — if attempt 1's region text is ≥ 15 % Latin letters, the retry's Latin share may not fall by more than 0.15 absolute. (c) is the fix for transliteration drift. Thresholds in (c) are **PROPOSED (unvalidated)**. | **Decided (shape), values PROPOSED** | EV-4.3: an accepted hi2 region replaced Hinglish (Latin ≈ 0.50) with English written in Devanagari (Latin ≈ 0.13) while gaining trusted speech, so trusted speech alone is insufficient. |
+| D28 | **Retry compute is capped.** Total retried audio may not exceed `retry_budget_fraction` of the file; regions are retried in descending order of suspect seconds until the budget is spent, and the remainder is recorded as `not_retried_budget` with status `still_degraded`. Value: **0.30, PROPOSED (unvalidated)**. This bounds a run at roughly 1.3 decode passes instead of the 2.0 passes measured. | **Decided (cap), value PROPOSED** | EV-4.6: 74-min Tamil took 3 h 52 min total (RTF 3.13) — first pass 70 min, retries 2 h 41 min, 4 344 s of 4 439 s re-decoded. |
+| D29 | **`mixed_v1`'s temperature cap (0.0–0.4) is experimental and unvalidated.** It was chosen from EV-3.3 (unbounded fallback to T = 1.0 produced word salad), never measured as a profile. It stays, labelled, until a profile-level measurement exists. No `mixed` real-podcast run has been made. | **PROPOSED (unvalidated)** | EV-3.3 only; no direct measurement of the cap. |
+
+**Latency reality recorded at CP3** (D5's open "max acceptable processing time" is *not* answered here): on this CPU (int8), `base` runs at ≈ 0.1× real time and `large-v3` at ≈ 1–3× real time per pass. With D26 + D28 a 2 h Hindi/Tamil podcast is bounded at roughly 1.3 `large-v3` passes (≈ 3–8 h), which is **still not a product-acceptable latency**. Choosing a product latency ceiling, and whether that implies GPU or a smaller model, remains open and is **not** decided by CP3.
 
 **Process rule:** one phase at a time: implement → test → measure → report → STOP for approval. Evidence contradicting a plan assumption is brought back before any architectural change. Dubbing/voice translation remains an extension point only.
 
@@ -109,6 +128,27 @@ reference-free metrics. Scripts: `evaluation/experiments/realworld_*.py`; data i
 | EV-3.13 | **Previous-text conditioning carries the code-switch script convention.** hi2 ON wrote Hinglish as Hindi-in-Devanagari + English-in-Latin throughout; OFF drifted between windows, writing English terms phonetically in Devanagari ("थिन लैपटॉप", "इंटेग्रेटेड राम"). hi1 OFF alternated between correct mixed script, all-English lines and Devanagari nonsense. | 2 Hindi windows. |
 | EV-3.14 | New hallucination forms not caught by `repeated_text`: "सब्सक्राइब" inserted inline inside real sentences (hi2 opening, OFF), and short phrase loops that stay under the repetition threshold. | — |
 | EV-3.15 | Body starts verified from large-v3 OFF opening transcripts: ta2 2:07 confirmed (narrated intro, highlight clips 0:35–1:33, "ரம்யா ஷோவிற்கு வருகிறீர்கள்" at 2:08); hi2 conversation starts ~2:14 (montage to ~1:12, host introduces guest 1:23–2:14), 9 s earlier than the 2:23 estimate. | — |
+
+### Adaptive ASR stage validation (`adaptive_v1`, 2026-09-18)
+
+What ran: the experimental stage (committed `c7719dc`, opt-in, production default
+unchanged) on the same podcast-body windows as the previous-text comparison, with
+manual language selection, plus one whole-file run. 308 backend tests pass,
+including the legacy goldens. Scripts:
+`evaluation/experiments/adaptive_asr_validation.py`; artifacts in
+`eval_data/realworld/adaptive_v1/` (not in git). Transcripts were read, not listened
+to. "Trusted words/min" = words from non-suspicious segments per minute of VAD speech.
+
+| ID | Observation | Limits |
+|---|---|---|
+| EV-4.1 | **English is unchanged and needs no retry.** `en_v1` (`base`) passed the gate `ok` on the first attempt, 241 trusted words/min, 0 regions, 26 s wall for a 5-min window (RTF 0.09). `auto` selected `en_v1` from probes (8/8 `en`) and produced the identical transcript, at the cost of ~66 s of `large-v3` probing. Confirms EV-3.1: `large-v3` is not justified for English. | One English window. |
+| EV-4.2 | **Regional retry beats both global previous-text settings on 3 of 4 Hindi/Tamil windows.** Trusted words/min (ON only → OFF only → adaptive): ta1 44 → 138 → **139**; ta2 15 → 87 → 87; hi2 228 → 142 → **236**; hi1 19 → 125 → **72**. Loop seconds: ta1 178 → 32 → **15**; hi2 0 → 41 → **0**. hi2 is the regression case from EV-3.11: the pipeline kept attempt 1 for 215 s of 300 s, retried 85 s, and one retry recovered ≈ 13 s of speech that ON had silently dropped (45:53–46:06). | 4 windows, 5 min each. hi1 is a loss, see EV-4.7. |
+| EV-4.3 | **Trusted-speech-only acceptance is insufficient.** An accepted hi2 region (42:27–43:14) replaced correct Hinglish with English transliterated into Devanagari ("अलॉइस यूज", "एफिशेंटी"): region Latin share ≈ 0.50 → ≈ 0.13. It was triggered by a 0.56 s weak-signal segment and accepted on a tie. Motivates D27(c). | One region; script share measured, readability judged by reading. |
+| EV-4.4 | **Previous-text ON collapses on full-length Tamil.** Attempt 1 of the 74-min ta2 file (`ta_v1`, ON) gated `hard_fail` with **1 785 suspicious spans** — far worse than the same configuration on a 5-min window of the same file. Motivates D25. | One file. |
+| EV-4.5 | **Region size predicts whether a retry helps.** Across all adaptive runs, every retried region ≥ 238 s ended `still_suspicious`; every region that ended `resolved` was ≤ 81 s (hi2 47 s / 20 s, hi1 54 s). Basis for D26's shape; the exact 120 s bound is still proposed. | Correlational, from 18 regions; no experiment varying region size directly. |
+| EV-4.6 | **Unbounded regions turn "regional" retry into a full re-decode.** 74-min Tamil: 3 h 52 min wall (RTF 3.13), first pass 70 min, retries 2 h 41 min, 13 regions (11 accepted, 2 rejected) spanning **4 344 s of 4 439 s (98 %)**, largest region 1 299 s, peak RSS 5.8 GB, final status `still_degraded` with 1 802 s of loop-flagged text. Motivates D26 + D28. | One file, one configuration. |
+| EV-4.7 | **A region retry can be worse than the same setting applied to the whole file.** hi1's 55–300 s region retry (previous-text OFF) produced "सब्सक्राइब" loops that the full-file OFF decode did not, giving 72 trusted words/min against OFF's 125. Loop onset depends on where the decode window starts, so region boundaries are themselves a quality variable. | One region. |
+| EV-4.8 | **Merge safety held everywhere.** Across all adaptive runs: no segment overlaps, no duplicated edge words, segment order and ids intact, word timestamps monotonic. Residual defect: 5 merge edges in the long run start 2–8 s late, leaving untranscribed speech at the region start (the retry decoder skipping its own region head, not a merge error). | Checked mechanically by `boundary_checks`/`global_checks`, not by listening. |
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 

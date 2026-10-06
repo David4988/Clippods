@@ -101,10 +101,14 @@ _RICH = PROFILES["rich_v1"]
 PROFILES.update({
     "en_v1": replace(_RICH, name="en_v1", model="base"),
     "hi_v1": replace(_RICH, name="hi_v1", model="large-v3"),
-    "ta_v1": replace(_RICH, name="ta_v1", model="large-v3"),
-    # Conservative for code-switched/uncertain speech: temperature fallback capped at
-    # 0.4 because unconstrained fallback to T=1.0 produced word salad with foreign
-    # tokens (EV-3.3). Provisional: not yet measured as a whole profile.
+    # CP3/D25: Tamil attempt 1 runs with previous-text OFF. ON was far worse on both
+    # tested Tamil windows (EV-3.11: 44 -> 138 and 15 -> 87 trusted words/min) and
+    # collapsed to hard_fail on a full-length file (EV-4.4). The regional retry flips
+    # it back ON, so previous-text conditioning is still reachable per region.
+    "ta_v1": replace(_RICH, name="ta_v1", model="large-v3", condition_on_previous_text=False),
+    # CP3/D29: PROPOSED, UNVALIDATED. The 0.4 temperature cap comes from EV-3.3
+    # (unbounded fallback to T=1.0 produced word salad), but this profile has never
+    # been measured as a whole, and no real-podcast `mixed` run exists yet.
     "mixed_v1": replace(_RICH, name="mixed_v1", model="large-v3", temperature=(0.0, 0.2, 0.4)),
 })
 
