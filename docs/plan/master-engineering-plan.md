@@ -150,6 +150,37 @@ to. "Trusted words/min" = words from non-suspicious segments per minute of VAD s
 | EV-4.7 | **A region retry can be worse than the same setting applied to the whole file.** hi1's 55–300 s region retry (previous-text OFF) produced "सब्सक्राइब" loops that the full-file OFF decode did not, giving 72 trusted words/min against OFF's 125. Loop onset depends on where the decode window starts, so region boundaries are themselves a quality variable. | One region. |
 | EV-4.8 | **Merge safety held everywhere.** Across all adaptive runs: no segment overlaps, no duplicated edge words, segment order and ids intact, word timestamps monotonic. Residual defect: 5 merge edges in the long run start 2–8 s late, leaving untranscribed speech at the region start (the retry decoder skipping its own region head, not a merge error). | Checked mechanically by `boundary_checks`/`global_checks`, not by listening. |
 
+### EV-5.1 — held-out Hindi prediction (PRE-REGISTERED 2026-10-07, before any decode)
+
+Question: can the **existing language-probe signal** predict whether a Hindi/Hinglish
+file should decode its first pass with `condition_on_previous_text` ON or OFF?
+Open since CP3: hi2 needs ON (EV-3.11/EV-4.2), hi1 collapses with ON (EV-4.7, and
+`hard_fail` after CP3 bounds), so a static per-language setting cannot serve both.
+
+Held-out file: **hi3** (never used for any ASR decision so far). Its probe signal
+already on record, from `base` probes (EV-3.4 era, `eval_data/realworld/asr/base/hi3.json`):
+English argmax **2/8** (body_early), **7/8** (body_middle), **7/8** (body_late);
+minimum probe probability **0.499–0.744** across windows. Reference points from the
+large-v3 probes of the decided files: hi1 min **0.557** / mean 0.767 (ON fails);
+hi2 min **0.903** / mean 0.947 (ON succeeds).
+
+**Prediction (fixed before running; thresholds are not to be revised afterwards):**
+hi3 behaves like hi1, not like hi2 —
+
+| Arm | Latin share | Trusted words / speech-minute | Gate |
+|---|---|---|---|
+| ON (`hi_v1` as defined) | < 0.10 | < 60 | degraded or hard_fail likely |
+| OFF (same profile, previous-text off) | 0.35–0.65 | > 100 | — |
+
+**Design:** two arms only, **first pass only** — no adaptive retry, no region retry,
+no second-pass rescue, no policy change, one decode per arm. Windows: hi3
+body_early/middle/late; plus hi2 body_early and body_late for both arms, to widen
+the ON-success side beyond the single hi2 window already measured. Manual
+`language=hi` throughout. Probe distributions (top-3 per 30 s probe) are recorded as
+instrumentation only; language detection is not redesigned.
+
+Result and verdict are recorded below once the run completes.
+
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 
 ---
