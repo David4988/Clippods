@@ -158,7 +158,9 @@ def get_model(model: str = "base", device: str = "cpu", compute_type: str = "int
             return _models[key]
         try:
             from faster_whisper import WhisperModel
-            _models[key] = WhisperModel(model, device=device, compute_type=compute_type)
+            from config import ASR_MODEL_DIR
+            _models[key] = WhisperModel(model, device=device, compute_type=compute_type,
+                                        download_root=ASR_MODEL_DIR)
             _model_load_error = None
             logger.info("Faster-Whisper '%s' model loaded (%s/%s).", model, device, compute_type)
         except Exception as e:

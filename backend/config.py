@@ -88,6 +88,9 @@ JOB_RECORD_TTL_HOURS = float(os.environ.get("JOB_RECORD_TTL_HOURS", "24.0"))
 # "adaptive_v1" selects a per-language profile, gates quality and retries only
 # suspicious regions once (services/asr_pipeline.py). Opt-in; not the default.
 ASR_PROFILE = os.environ.get("ASR_PROFILE", "legacy")
+# Where Faster-Whisper models are cached (a Hugging Face hub cache folder).
+# Unset = the default ~/.cache/huggingface/hub.
+ASR_MODEL_DIR = os.environ.get("ASR_MODEL_DIR") or None
 if ASR_PROFILE not in ("legacy", "rich_v1", "adaptive_v1"):
     raise ValueError(f"ASR_PROFILE must be 'legacy', 'rich_v1' or 'adaptive_v1', got {ASR_PROFILE!r}")
 

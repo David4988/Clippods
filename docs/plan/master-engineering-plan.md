@@ -207,6 +207,14 @@ instrumentation only; language detection is not redesigned.
   confounded with hi3 being English and derived from the same runs; **not adopted**.
 - **Verdict: option B** — Hindi first pass previous-text OFF (decision D30). Option C (file-level
   adaptive choice) is ruled out by within-file variation.
+- **D30 validation (2026-10-18, adaptive_v1, body_middle windows, artifacts
+  `eval_data/realworld/adaptive_v1/d30_hindi_summary.json`):** trusted words/min ON → OFF:
+  hi1 50.0 → **84.6** (loop seconds 220 → 82, `hard_fail` → `still_degraded`); hi2 **227.0** →
+  144.6 (loop seconds 0 → 14), the known ON-favouring window, where OFF also writes embedded
+  English in Devanagari and the ON retry of its 158 s region was refused by D26's 120 s bound.
+  Mixed result; **OFF kept by owner decision** because it removes the collapse failure mode and
+  wins on 4 of 5 Hindi-dominant windows (EV-5.1). Wall time fell on both windows (623 → 438 s,
+  996 → 869 s).
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 

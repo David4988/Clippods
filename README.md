@@ -240,6 +240,7 @@ cp backend/.env.example backend/.env   # optional
 | `YT_DLP_TIMEOUT_SECONDS`   | yt-dlp download timeout            | `600`         |
 | `MAX_VIDEO_DURATION_SECONDS` | Longest accepted video (seconds) | `7200`        |
 | `ASR_PROFILE`              | `legacy` (original decode), `rich_v1` (word timestamps + VAD filtering) or `adaptive_v1` (per-language profiles + one region-scoped retry) | `legacy` |
+| `ASR_MODEL_DIR`            | Folder holding the Faster-Whisper models (a Hugging Face hub cache); unset = `~/.cache/huggingface/hub` | unset |
 | `TEMP_FILE_MAX_AGE_HOURS`  | Temp file age before cleanup (files of running jobs are never removed) | `4` |
 | `OUTPUT_DIR_MAX_AGE_HOURS` | Output run folder age before cleanup | `24`        |
 | `DEBUG_RUN_MAX_AGE_HOURS`  | With `ENABLE_DEBUGGER=true`: age before runs with `analysis.json` are removed (`0` = keep) | `0` |

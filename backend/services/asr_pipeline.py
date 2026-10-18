@@ -112,11 +112,12 @@ class ProfileChoice:
 def available_models(candidates=KNOWN_MODELS) -> set[str]:
     """Models present in the local cache. Never downloads."""
     from faster_whisper.utils import download_model
+    from config import ASR_MODEL_DIR
 
     found = set()
     for name in candidates:
         try:
-            download_model(name, local_files_only=True)
+            download_model(name, local_files_only=True, cache_dir=ASR_MODEL_DIR)
             found.add(name)
         except Exception:
             pass
