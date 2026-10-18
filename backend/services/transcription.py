@@ -100,7 +100,11 @@ PROFILES: dict[str, AsrProfile] = {
 _RICH = PROFILES["rich_v1"]
 PROFILES.update({
     "en_v1": replace(_RICH, name="en_v1", model="base"),
-    "hi_v1": replace(_RICH, name="hi_v1", model="large-v3"),
+    # D30 (EV-5.1): Hindi attempt 1 also runs with previous-text OFF. On Hindi-dominant
+    # windows OFF beat ON on 4 of 5 (hi2 early 148 vs 73, hi2 late 139 vs 116, hi1 125
+    # vs 19, hi3 early 116 vs 41 trusted words/min); only hi2 middle favoured ON. The
+    # regional retry flips it back ON, so that behaviour stays reachable per region.
+    "hi_v1": replace(_RICH, name="hi_v1", model="large-v3", condition_on_previous_text=False),
     # CP3/D25: Tamil attempt 1 runs with previous-text OFF. ON was far worse on both
     # tested Tamil windows (EV-3.11: 44 -> 138 and 15 -> 87 trusted words/min) and
     # collapsed to hard_fail on a full-length file (EV-4.4). The regional retry flips

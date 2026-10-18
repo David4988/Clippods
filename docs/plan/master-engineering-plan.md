@@ -53,6 +53,7 @@ not a measured optimum.
 | D27 | **Retry acceptance requires more trusted speech AND no regression.** All must hold: (a) trusted speech in the region grows by ≥ 1 s, or stays within 1 s while suspect seconds fall and trusted speech is non-zero; (b) suspect seconds do not increase; (c) **code-switch preservation** — if attempt 1's region text is ≥ 15 % Latin letters, the retry's Latin share may not fall by more than 0.15 absolute. (c) is the fix for transliteration drift. Thresholds in (c) are **PROPOSED (unvalidated)**. | **Decided (shape), values PROPOSED** | EV-4.3: an accepted hi2 region replaced Hinglish (Latin ≈ 0.50) with English written in Devanagari (Latin ≈ 0.13) while gaining trusted speech, so trusted speech alone is insufficient. |
 | D28 | **Retry compute is capped.** Total retried audio may not exceed `retry_budget_fraction` of the file; regions are retried in descending order of suspect seconds until the budget is spent, and the remainder is recorded as `not_retried_budget` with status `still_degraded`. Value: **0.30, PROPOSED (unvalidated)**. This bounds a run at roughly 1.3 decode passes instead of the 2.0 passes measured. | **Decided (cap), value PROPOSED** | EV-4.6: 74-min Tamil took 3 h 52 min total (RTF 3.13) — first pass 70 min, retries 2 h 41 min, 4 344 s of 4 439 s re-decoded. |
 | D29 | **`mixed_v1`'s temperature cap (0.0–0.4) is experimental and unvalidated.** It was chosen from EV-3.3 (unbounded fallback to T = 1.0 produced word salad), never measured as a profile. It stays, labelled, until a profile-level measurement exists. No `mixed` real-podcast run has been made. | **PROPOSED (unvalidated)** | EV-3.3 only; no direct measurement of the cap. |
+| D30 | **Hindi attempt 1 uses `condition_on_previous_text=False`** (2026-10-18, owner decision). `hi_v1` switches ON → OFF, mirroring D25; its regional retry flips to ON. `en_v1` and `mixed_v1` keep ON. Also fixes V1 language handling: manual `en | hi | ta` only, no automatic language switching. | **Decided from evidence** | EV-5.1: on Hindi-dominant windows OFF beat ON on trusted words/min in 4 of 5 (hi2 early 148 vs 73, hi2 late 139 vs 116, hi1 middle 125 vs 19, hi3 early 116 vs 41); the sole exception is hi2 middle (142 vs 228). The pre-registered probe signal did not generalize, so a file-level adaptive choice (option C) is not justified. |
 
 **Latency reality recorded at CP3** (D5's open "max acceptable processing time" is *not* answered here): on this CPU (int8), `base` runs at ≈ 0.1× real time and `large-v3` at ≈ 1–3× real time per pass. With D26 + D28 a 2 h Hindi/Tamil podcast is bounded at roughly 1.3 `large-v3` passes (≈ 3–8 h), which is **still not a product-acceptable latency**. Choosing a product latency ceiling, and whether that implies GPU or a smaller model, remains open and is **not** decided by CP3.
 
@@ -179,7 +180,33 @@ the ON-success side beyond the single hi2 window already measured. Manual
 `language=hi` throughout. Probe distributions (top-3 per 30 s probe) are recorded as
 instrumentation only; language detection is not redesigned.
 
-Result and verdict are recorded below once the run completes.
+**Result (run 2026-10-07, artifacts `eval_data/realworld/ev51/`): prediction FAIL.**
+
+| file | window | arm | min probe p | English probe share | Latin share | trusted WPM | loop s | gate | RTF |
+|---|---|---|---|---|---|---|---|---|---|
+| hi3 | early | ON | 0.517 | 1/8 | 0.000 | 40.6 | 125.9 | hard_fail | 1.90 |
+| hi3 | early | OFF | 0.517 | 1/8 | 0.746 | 116.2 | 44.4 | degraded | 0.80 |
+| hi3 | middle | ON | 0.482 | 7/8 | 1.000 | 158.2 | 4.9 | degraded | 1.18 |
+| hi3 | middle | OFF | 0.482 | 7/8 | 0.835 | 87.2 | 30.0 | degraded | 0.68 |
+| hi3 | late | ON | 0.677 | 8/8 | 1.000 | 159.6 | 5.7 | degraded | 0.74 |
+| hi3 | late | OFF | 0.677 | 8/8 | 0.629 | 93.2 | 145.9 | degraded | 0.84 |
+| hi2 | early | ON | 0.936 | 0/8 | 0.000 | 73.2 | 140.6 | degraded | 2.16 |
+| hi2 | early | OFF | 0.936 | 0/8 | 0.000 | 148.3 | 46.7 | degraded | 1.52 |
+| hi2 | late | ON | 0.955 | 0/8 | 0.002 | 116.0 | 47.1 | degraded | 2.29 |
+| hi2 | late | OFF | 0.955 | 0/8 | 0.277 | 138.7 | 69.0 | degraded | 1.32 |
+
+- **hi3 ON collapse: partial** (body_early only). **OFF recovery: no** — the Latin band 0.35–0.65
+  and > 100 WPM were never met together. Thresholds were not revised.
+- **The premise was wrong:** hi3's middle/late windows are genuinely English speech (both arms
+  produce identical correct English), and hi3 early is English transliterated into Devanagari
+  under forced `hi`. hi3 was a weak held-out test of Hindi.
+- **The probe signal does not generalize.** hi2 has the highest min probe p (0.936, 0.955) yet ON
+  loops on both new windows; hi3 has hi1-like low min p yet ON is clean on middle/late. hi2's ON
+  advantage (EV-3.11) does not extend beyond body_middle: the better arm varies *within* a file.
+- A post-hoc pattern (low English argmax share coincides with ON looping) is visible but
+  confounded with hi3 being English and derived from the same runs; **not adopted**.
+- **Verdict: option B** — Hindi first pass previous-text OFF (decision D30). Option C (file-level
+  adaptive choice) is ruled out by within-file variation.
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 

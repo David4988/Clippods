@@ -145,8 +145,8 @@ def probes_of(*languages):
 def test_manual_language_selects_its_profile(selection, profile, model):
     choice = select_profile(selection, BOTH)
     assert (choice.profile.name, choice.profile.model) == (profile, model)
-    # CP3/D25: Tamil attempt 1 runs previous-text OFF; the others keep it ON.
-    assert choice.profile.condition_on_previous_text is (selection != "ta")
+    # D25 (Tamil) and D30 (Hindi): attempt 1 runs previous-text OFF; en and mixed keep ON.
+    assert choice.profile.condition_on_previous_text is (selection in ("en", "mixed"))
     assert choice.decode_language == (None if selection == "mixed" else selection)
 
 
@@ -347,10 +347,11 @@ def test_retry_profile_base_goes_to_large_v3_without_previous_text():
 
 
 def test_retry_profile_large_v3_flips_previous_text():
-    p = retry_profile_for(transcription.PROFILES["hi_v1"], BOTH)
+    on = transcription.PROFILES["mixed_v1"]                  # large-v3, previous-text ON
+    p = retry_profile_for(on, BOTH)
     assert (p.model, p.condition_on_previous_text) == ("large-v3", False)
-    off = transcription.PROFILES["hi_v1"].__class__(**{**transcription.PROFILES["hi_v1"].__dict__,
-                                                      "condition_on_previous_text": False})
+    off = transcription.PROFILES["hi_v1"]                    # large-v3, previous-text OFF (D30)
+    assert off.condition_on_previous_text is False
     assert retry_profile_for(off, BOTH).condition_on_previous_text is True
 
 
@@ -471,8 +472,9 @@ def test_large_v3_region_retry_flips_previous_text(monkeypatch, audio_file):
     calls = []
     models = {"large-v3": ScriptedModel("large-v3", calls, full=LOOP_FULL, region=GOOD_REGION)}
     t = run(monkeypatch, audio_file, language="hi", models=models, probes=probes_of(*("hi",) * 8))
-    assert [c["condition_on_previous_text"] for c in calls] == [True, False]
-    assert t.attempts[1].profile == "hi_v1.retry" and t.attempts[1].condition_on_previous_text is False
+    # D30: Hindi attempt 1 is OFF, so its region retry flips to ON.
+    assert [c["condition_on_previous_text"] for c in calls] == [False, True]
+    assert t.attempts[1].profile == "hi_v1.retry" and t.attempts[1].condition_on_previous_text is True
 
 
 def test_one_retry_cap_and_still_degraded(monkeypatch, audio_file):
