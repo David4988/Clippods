@@ -2,7 +2,7 @@
 
 **Backend cleanup, transcription reliability, clip selection and boundary quality**
 
-Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measurements complete · CP3 is the open gate (decisions below) · Phase 2 dataset not frozen**
+Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measured · CP3 decided (D25–D30); ASR frozen for V1 · Phase 5 implemented (structure recorded, selection unchanged) · CP4 is the open gate · Phase 2 dataset not frozen**
 Investigation date: 2026-09-14 · Investigated at `bf7b0c9` (main)
 Last state update: 2026-10-06 · experimental `adaptive_v1` ASR stage committed at `c7719dc` (branch `asr-rich-contract`), opt-in only
 
@@ -215,6 +215,35 @@ instrumentation only; language detection is not redesigned.
   Mixed result; **OFF kept by owner decision** because it removes the collapse failure mode and
   wins on 4 of 5 Hindi-dominant windows (EV-5.1). Wall time fell on both windows (623 → 438 s,
   996 → 869 s).
+
+### Phase 5 — sentences, thought units and safe cut points (2026-10-19)
+
+Implemented: `services/units.py`, `services/cut_points.py`, `services/speech_structure.py`
+(`structure_v1`). Every pipeline run now writes `speech_structure.json` and a summary in
+`analysis.json`; clip selection is unchanged (legacy goldens pass, 339 tests). Measured offline
+on saved V1-config transcripts — no ASR re-run — with
+`evaluation/experiments/phase5_structure_report.py`; report in `eval_data/realworld/phase5/`.
+Windows: en 9 × 5 min, hi 5 (+ hi3 middle/late reported apart: English speech, EV-5.1),
+ta 2 (thin), plus the 74-min ta2 file as a scale check. Params (all recorded):
+`sentence_pause_ms 700, thought_break_ms 1200, thought_max_s 90, word_gap_tolerance_s 0.25,
+min_cut_gap_ms 150, pre_roll_s 0.25, post_roll_s 0.35`.
+
+| ID | Observation | Limits |
+|---|---|---|
+| EV-6.1 | **Every cut time lies inside measured VAD silence**: 0 of 1,240 cut points across the windows (en 718, hi 276, ta 161, hi3-English 85) and 0 of 470 on the 74-min file. Build time 3–22 ms per file (74 min: 18 ms). | Invariant holds by construction and is checked independently. |
+| EV-6.2 | **The current picker cuts through speech.** `legacy_v2@5` clip boundaries fall inside speech for en 79/90, hi 35/50, ta 14/20. A safe cut is usually close: median distance from a legacy start to the nearest safe cut 0.8 s (en), 1.6 s (hi), 1.5 s (ta); cut points occur 11–16 per minute. | Diagnostic only; legacy clips are not snapped in production. |
+| EV-6.3 | **Punctuation density differs by language**: terminals per 100 trusted words en 6.4, **hi 0.9**, ta 11.6. Hindi sentences are mostly pause-defined (62 pause vs 22 punctuation). Sentence duration p50/p90: en 2.6/8.5 s, hi 5.4/30.0 s, ta 2.4/7.3 s. | hi: 5 windows; ta: 2. |
+| EV-6.4 | **Punctuation is not a pause.** 43–50 % of punctuated sentence ends have no measurable silence (≥ 150 ms); median silence after punctuation is 160–256 ms. So only en 57 %, ta 63 % of inner sentence boundaries have a safe cut (hi 88 %, because its boundaries are pause-defined). Thought boundaries: en 71 %, ta 88 %, hi 100 %. | Silence measured by Silero at the Phase 3 parameters. |
+| EV-6.5 | **Thought units are short relative to the 25–60 s clip target**: median en 10.6 s, hi 15.8 s, ta 7.4 s; p90 49–59 s. A clip will usually span several thoughts. In English, *question* is the dominant thought break (80 of 136), likely over-splitting on tag/rhetorical questions. Hindi used the 90 s max-length split 8 times. | Heuristic units; no discourse markers in V1. |
+| EV-6.6 | **Word timings and VAD disagree around 5–11 % of words**: words whose timing midpoint lies inside a silence chosen for cutting — en 418/8,323 (5 %), hi 216/2,671 (8 %), ta 111/980 (11 %). Either the words are mis-timed or the speech was too quiet for VAD; a cut there could clip a quiet word. Found during implementation: such words initially shattered text into one-word "sentences"; fixed by letting one silence mark only its best-overlapping word boundary. | Needs a listening check in Phase 6 before cuts are trusted blind. |
+| EV-6.7 | **Untrusted text reduces usable material**: speech excluded by the quality gate — en 62 s of 45 min, **hi 360 s of 25 min (24 %)**, ta 76 s of 10 min. No unit spans it; Phase 6 candidate recall in Hindi will be lower. | Depends on the ASR quality accepted for V1. |
+
+**CP4 inputs (decisions for the owner — nothing here is decided yet):**
+- **D6 padding**: proposed pre-roll 0.25 s / post-roll 0.35 s; padding is also capped by the silence itself, and real sentence-end silences are short (median ~0.2 s).
+- **D7 duration**: thoughts are 7–16 s at the median, so 25–60 s clips need roughly 2–6 thoughts; safe cuts are dense enough (11–16 / min) to place both ends.
+- **D8 open loops**: question boundaries are frequent in English; whether a clip may end on a question (open loop) changes how many endings are available.
+- Unit rules to confirm: `sentence_pause_ms` 700 (carries Hindi), `thought_break_ms` 1200, and the question-break rule (EV-6.5).
+
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
 
