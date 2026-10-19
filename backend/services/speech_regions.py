@@ -65,3 +65,16 @@ def overlap_seconds(start: float, end: float, regions: list[tuple[float, float]]
 
 def contains(time: float, regions: list[tuple[float, float]], tolerance: float = 0.0) -> bool:
     return any(r_start - tolerance <= time <= r_end + tolerance for r_start, r_end in regions)
+
+
+def silences(regions: list[tuple[float, float]], audio_duration: float) -> list[tuple[float, float]]:
+    """Measured non-speech intervals: the complement of sorted speech regions within the audio."""
+    gaps: list[tuple[float, float]] = []
+    cursor = 0.0
+    for r_start, r_end in regions:
+        if r_start > cursor:
+            gaps.append((round(cursor, 3), round(r_start, 3)))
+        cursor = max(cursor, r_end)
+    if audio_duration > cursor:
+        gaps.append((round(cursor, 3), round(audio_duration, 3)))
+    return gaps

@@ -118,7 +118,8 @@ def test_completed_run_saves_readable_analysis_with_pipeline_record(tmp_path):
     pipeline = analysis["pipeline"]
     assert pipeline["status"] == "completed" and pipeline["failed_stage"] is None
     assert [s["stage"] for s in pipeline["stages"]] == [
-        "download", "probe", "extract_audio", "transcribe", "select_segments", "generate_clips"]
+        "download", "probe", "extract_audio", "transcribe", "speech_structure", "select_segments",
+        "generate_clips"]
     assert all(s["ok"] and s["wall_s"] is not None for s in pipeline["stages"])
 
 

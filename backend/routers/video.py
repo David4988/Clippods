@@ -45,6 +45,7 @@ from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
 from services.asr_pipeline import transcribe_adaptive
 from services.transcript import LANGUAGE_MODES, LANGUAGE_SELECTIONS
+from services.speech_structure import build_speech_structure
 from services.transcription import transcribe_rich
 from utils import cleanup_file, cleanup_temp_artifacts, write_json_atomic
 from config import KEEP_ORIGINAL_FOR_DEBUG
@@ -139,6 +140,8 @@ async def _run_pipeline(
     video_duration: Optional[float] = None
     segments: Optional[list] = None
     transcript = None
+    structure = None
+    structure_error: Optional[str] = None
     clip_paths: list[str] = []
     register_job_path(job_id, video_path)
     try:
@@ -207,6 +210,18 @@ async def _run_pipeline(
         # legacy_v2 consumes the original start/end/text view of the transcript.
         segments = transcript.legacy_segments()
 
+        # Sentences, thought units and safe cut points. Recorded for every run but
+        # not used by legacy selection yet, so a failure warns instead of failing
+        # the job (and the stage itself still completes).
+        with trace.stage("speech_structure"):
+            try:
+                structure = build_speech_structure(transcript)
+            except Exception as exc:
+                structure_error = f"{type(exc).__name__}: {exc}"
+                logger.exception("Pipeline: speech structure was not computed")
+                if job_id is not None:
+                    add_job_warning(job_id, f"Speech structure was not computed: {structure_error}")
+
         _raise_if_cancelled(job_id)
 
         # Task 4: select_segments (with analysis collection)
@@ -255,7 +270,11 @@ async def _run_pipeline(
                     # record would always show it as unfinished.
                     analysis_data["pipeline"] = trace.as_dict("completed")
                     analysis_data["asr"] = transcript.summary()
+                    analysis_data["speech_structure"] = (
+                        structure.summary() if structure is not None else {"error": structure_error})
                     write_json_atomic(clip_dir / "transcript.json", transcript.to_dict())
+                    if structure is not None:
+                        write_json_atomic(clip_dir / "speech_structure.json", structure.to_dict())
                     analysis_path = write_json_atomic(clip_dir / "analysis.json", analysis_data)
                     logger.info("Pipeline: saved analysis.json to %s", analysis_path)
 
@@ -291,7 +310,7 @@ async def _run_pipeline(
             shutil.rmtree(Path(clip_paths[0]).parent, ignore_errors=True)
         _save_failure_analysis(
             trace, "cancelled" if cancelled else "error", _job_error_message(exc),
-            job_id, video_url, video_path, video_duration, segments, transcript,
+            job_id, video_url, video_path, video_duration, segments, transcript, structure,
         )
         raise
     finally:
@@ -323,7 +342,8 @@ def _enrich_meta(analysis: dict, job_id, run_uuid, video_url, video_path) -> Non
 
 
 def _save_failure_analysis(trace: _PipelineTrace, status: str, error: str, job_id, video_url,
-                           video_path, video_duration, segments, transcript=None) -> None:
+                           video_path, video_duration, segments, transcript=None,
+                           structure=None) -> None:
     """
     Write an analysis.json for a run that did not complete, so the debugger can
     show where and why it stopped. Same top-level shape as a completed run
@@ -349,6 +369,9 @@ def _save_failure_analysis(trace: _PipelineTrace, status: str, error: str, job_i
         if transcript is not None:
             analysis["asr"] = transcript.summary()
             write_json_atomic(config.OUTPUTS_DIR / run_uuid / "transcript.json", transcript.to_dict())
+        if structure is not None:
+            analysis["speech_structure"] = structure.summary()
+            write_json_atomic(config.OUTPUTS_DIR / run_uuid / "speech_structure.json", structure.to_dict())
         write_json_atomic(config.OUTPUTS_DIR / run_uuid / "analysis.json", analysis)
         update_job(job_id, run_uuid=run_uuid)
     except Exception:
