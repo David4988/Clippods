@@ -2,7 +2,7 @@
 
 **Backend cleanup, transcription reliability, clip selection and boundary quality**
 
-Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measured · CP3 decided (D25–D30); ASR frozen for V1 · Phase 5 implemented (structure recorded, selection unchanged) · CP4 is the open gate · Phase 2 dataset not frozen**
+Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measured · CP3 decided (D25–D30); ASR frozen for V1 · Phase 5 implemented · CP4 decided (2026-10-19) · Phase 6 `boundary_v1` implemented (opt-in, default still `legacy_v2`) and measured on 4 full podcasts (EV-7.x) · awaiting owner listening review · Phase 2 dataset not frozen**
 Investigation date: 2026-09-14 · Investigated at `bf7b0c9` (main)
 Last state update: 2026-10-06 · experimental `adaptive_v1` ASR stage committed at `c7719dc` (branch `asr-rich-contract`), opt-in only
 
@@ -56,6 +56,20 @@ not a measured optimum.
 | D30 | **Hindi attempt 1 uses `condition_on_previous_text=False`** (2026-10-18, owner decision). `hi_v1` switches ON → OFF, mirroring D25; its regional retry flips to ON. `en_v1` and `mixed_v1` keep ON. Also fixes V1 language handling: manual `en | hi | ta` only, no automatic language switching. | **Decided from evidence** | EV-5.1: on Hindi-dominant windows OFF beat ON on trusted words/min in 4 of 5 (hi2 early 148 vs 73, hi2 late 139 vs 116, hi1 middle 125 vs 19, hi3 early 116 vs 41); the sole exception is hi2 middle (142 vs 228). The pre-registered probe signal did not generalize, so a file-level adaptive choice (option C) is not justified. |
 
 **Latency reality recorded at CP3** (D5's open "max acceptable processing time" is *not* answered here): on this CPU (int8), `base` runs at ≈ 0.1× real time and `large-v3` at ≈ 1–3× real time per pass. With D26 + D28 a 2 h Hindi/Tamil podcast is bounded at roughly 1.3 `large-v3` passes (≈ 3–8 h), which is **still not a product-acceptable latency**. Choosing a product latency ceiling, and whether that implies GPU or a smaller model, remains open and is **not** decided by CP3.
+
+## CP4 Decision Record (2026-10-19)
+
+Owner decisions taken before Phase 6, using the Phase 5 numbers (EV-6.x). They
+resolve the CP4 topics D6–D10 for `boundary_v1`.
+
+| Topic | Decision |
+|---|---|
+| D6 padding | **Keep 0.25 s before / 0.35 s after** each cut (capped by the silence itself). |
+| D7 duration | **Target 20–45 s; hard limits 12–60 s** (changed from the 25–60 s / 15–90 s proposal: shorter, punchier clips). Duration is a ranking prior inside the hard limits. |
+| D8 endings | **Question endings allowed, not favoured**: valid, recorded, no bonus — a question-induced thought boundary scores like a plain sentence ending. |
+| D9 shortfall | **Return fewer clips with a stated reason.** Never duplicate, never overlap, never cut through speech to reach 5. Zero clean clips fails the job with the reason. |
+| D10 score shown | `boundary_v1` does not expose its internal score (`score: null` in the API); tier and reasons are in `analysis.json`. |
+
 
 **Process rule:** one phase at a time: implement → test → measure → report → STOP for approval. Evidence contradicting a plan assumption is brought back before any architectural change. Dubbing/voice translation remains an extension point only.
 
@@ -243,6 +257,38 @@ min_cut_gap_ms 150, pre_roll_s 0.25, post_roll_s 0.35`.
 - **D7 duration**: thoughts are 7–16 s at the median, so 25–60 s clips need roughly 2–6 thoughts; safe cuts are dense enough (11–16 / min) to place both ends.
 - **D8 open loops**: question boundaries are frequent in English; whether a clip may end on a question (open loop) changes how many endings are available.
 - Unit rules to confirm: `sentence_pause_ms` 700 (carries Hindi), `thought_break_ms` 1200, and the question-break rule (EV-6.5).
+
+### Phase 6 — `boundary_v1` clip picker (2026-10-20)
+
+Implemented behind `SELECTION_ENGINE=boundary_v1` (default still `legacy_v2`):
+`services/selection/{features,ranker,lexicons,boundary_v1,registry}.py`,
+`services/audio_features.py`, with the CP4 decisions above. Compared on four full-length
+podcasts (en1 71 min, en2 63 min, hi2 85 min, ta1 65 min), all transcribed with `adaptive_v1`
+at the CP3 settings, using `legacy_v2@5` vs `boundary_v1@5` on the same transcript. Runs:
+`20261020T004505-…-9f1062` (en), `20261020T004510-…-0cd846` (hi), `20261020T013351-…-64fcda` (ta).
+
+| Podcast | Old: clip edges inside speech | New: edges inside speech | New: start / end at a sentence edge | New: length in 20–45 s | New: mean silence before / after |
+|---|---|---|---|---|---|
+| en1 | 10 / 10 | **0 / 10** | 5/5 · 5/5 | 5/5 (20–39 s) | 0.22 / 0.30 s |
+| en2 | 8 / 10 | **0 / 10** | 5/5 · 5/5 | 5/5 (22–31 s) | 0.25 / 0.35 s |
+| hi2 | 7 / 10 | **0 / 10** | 5/5 · 5/5 | 5/5 (21–38 s) | 0.25 / 0.35 s |
+| ta1 | 6 / 10 | **0 / 10** | 5/5 · 5/5 | 5/5 (21–39 s) | 0.25 / 0.31 s |
+
+| ID | Observation | Limits |
+|---|---|---|
+| EV-7.1 | **No clip edge cuts through speech**: 0 of 40 new edges vs 31 of 40 for `legacy_v2@5`. | Speech = Silero VAD at the Phase 3 parameters. |
+| EV-7.2 | **Clips start and end at sentence edges**: 20/20 starts and 20/20 ends (0.3 s tolerance) vs 1/20 and 1/20 for legacy. | Partly true by construction (sentences are `structure_v1`'s); the listening review is the real test. |
+| EV-7.3 | **All 20 clips are tier 1 and inside the D7 target** (20–39 s); no shortfall on any podcast. Legacy clips are 15–20 s, so its 0/20 in-target is a design difference, not a defect. | Four long podcasts; short inputs are covered only by tests. |
+| EV-7.4 | **Selection is cheap**: 190–560 ms per podcast for 361–1,638 candidates, loudness available on all four. | CPU, single run each. |
+| EV-7.5 | **Untrusted text is kept out**: candidates pruned as mostly untrusted: en 0–2, hi2 33 of 361, ta1 84 of 1,058. Mean untrusted share in picked clips: ta1 0.036 (legacy 0.109), others 0. | Trust = the CP3 quality gate. |
+| EV-7.6 | **Known weak spots, found by reading clip text**: (a) hi2's top clip starts at 0:02, inside the intro highlight montage (body starts ~2:14, EV-3.15); there is no intro/teaser detection, and the near-duplicate rule compares picked clips only with each other. (b) Hindi sentences are pause-defined (EV-6.3), so a pause mid-sentence occasionally makes a clip start on the tail of the previous sentence (e.g. a clip opening with "है…"); the cut is still in silence. | Text reading only; not yet heard. |
+| EV-7.7 | **Full-length ASR cost (`adaptive_v1`)**: en1 506 s (0.12× real time), en2 270 s (0.07×), hi2 10,958 s (2.16×), ta1 9,520 s (2.45×; `still_degraded`, 53 suspect segments). Confirms the CP3 latency note: Hindi/Tamil take 2–3 h per hour of audio on this CPU. | One run per file. |
+
+**Owner listening review (pending, the V1 baseline gate):** a blind packet is in
+`eval_data/realworld/phase6_review/` (`review.md`, 40 clips, A/B order randomised per podcast with
+seed 20261019, answer key in `key.json`). Built by `evaluation/experiments/phase6_review_packet.py`.
+Switching the defaults (`SELECTION_ENGINE=boundary_v1`, `ASR_PROFILE=adaptive_v1`) waits for that
+review.
 
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.
