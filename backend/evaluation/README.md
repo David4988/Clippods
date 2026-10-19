@@ -33,7 +33,7 @@ apply here (decision D14).
 | `hash <media>` | sha256 for pinning media in a manifest |
 | `promote <run_id>` | Copy a finished run's small JSON into git-tracked `evaluation/results/` |
 | `where` | Print data directories |
-| `run`/`adhoc` `--asr-profile legacy\|rich_v1` | ASR profile for the transcript stage (default `legacy`) |
+| `run`/`adhoc` `--asr-profile legacy\|rich_v1\|adaptive_v1` | ASR profile for the transcript stage (default `legacy`; `adaptive_v1` = V1 per-language pipeline, use with a manual `--language`) |
 | `python -m evaluation.inspect_transcript <run_id> <item_id> [--flagged] [--segments N]` | Readable transcript summary: language, probes, quality, flags, words |
 | `dataset add --manifest M --media FILE --id ID --languages ta[,en] [--tags …] [--speakers N] [--source-url URL] [--notes TEXT] [--copy]` | Hash + probe a media file and append it to an unfrozen manifest |
 | `dataset label-template --manifest M --item ID` | Create `labels/<ID>.json` from the draft label schema (never overwrites) |
@@ -43,9 +43,13 @@ apply here (decision D14).
 Dataset preparation steps and the label schema are documented in
 `datasets/clippods-eval/v1/README.md`.
 
-Engine specs are `<engine>@<clip_count>`. Available now: `legacy_v2` (the
-production `select_segments`, unchanged). Default: `legacy_v2@3` (historical)
-and `legacy_v2@5` (fair comparison with the 5-clip target).
+Engine specs are `<engine>@<clip_count>`. Available: `legacy_v2` (the
+production `select_segments`, unchanged) and `boundary_v1` (Phase 6 picker on
+sentence boundaries and safe cuts; gets the cached audio for loudness). Engines
+come from the production registry `services/selection/registry.py`. Default:
+`legacy_v2@3` (historical) and `legacy_v2@5` (fair comparison with the 5-clip
+target). Metrics include clip-edge quality (edges inside speech, edges at
+sentence boundaries, leading/trailing silence) for every engine.
 
 ## Where things live
 

@@ -45,6 +45,7 @@ from services.input_processing import get_video_input, save_uploaded_file
 from services.segment_selection import select_segments
 from services.asr_pipeline import transcribe_adaptive
 from services.transcript import LANGUAGE_MODES, LANGUAGE_SELECTIONS
+from services.selection import registry as selection_registry
 from services.speech_structure import build_speech_structure
 from services.transcription import transcribe_rich
 from utils import cleanup_file, cleanup_temp_artifacts, write_json_atomic
@@ -229,13 +230,35 @@ async def _run_pipeline(
         if job_id is not None:
             update_job(job_id, status="selecting_segments", progress=75, message="Selecting highlights...")
 
+        engine = config.SELECTION_ENGINE
+        if engine == "boundary_v1" and structure is None:
+            # boundary_v1 needs the speech structure; never fail the job for its absence.
+            engine = "legacy_v2"
+            if job_id is not None:
+                add_job_warning(job_id, "boundary_v1 needs the speech structure, which was not computed; "
+                                        "clips were picked with legacy_v2 instead")
+
         with trace.stage("select_segments"):
-            result = select_segments(segments, video_duration, collect_analysis=True)
-        if isinstance(result, tuple):
-            selected, analysis_data = result
-        else:
-            selected = result
-            analysis_data = None
+            if engine == "boundary_v1":
+                picked = selection_registry.run("boundary_v1", selection_registry.SelectionInput(
+                    transcript=transcript, video_duration=video_duration, clip_count=config.CLIP_COUNT,
+                    structure=structure, audio_path=audio_path,
+                ))
+                selected, analysis_data = picked.clips, picked.analysis
+                shortfall = analysis_data.get("shortfall_reason")
+                if not selected:
+                    # D9: say why; never fill with clips that cut through speech.
+                    raise HTTPException(status_code=422, detail=f"No clean clips could be found: {shortfall}")
+                if shortfall and job_id is not None:
+                    add_job_warning(job_id, f"Returned {len(selected)} clip(s) instead of {config.CLIP_COUNT}: "
+                                            f"{shortfall}")
+            else:
+                result = select_segments(segments, video_duration, collect_analysis=True)
+                if isinstance(result, tuple):
+                    selected, analysis_data = result
+                else:
+                    selected = result
+                    analysis_data = None
 
         _raise_if_cancelled(job_id)
 
@@ -295,12 +318,17 @@ async def _run_pipeline(
         rich_clips = []
         for i, path_str in enumerate(clip_paths):
             seg = selected[i]
-            rich_clips.append({
+            clip = {
                 "filename": Path(path_str).name,
-                "score": seg.get("score", 85),
+                # D10: boundary_v1's internal score is not a validated quality measure, so
+                # it is not exposed; the legacy cosmetic score stays as it always was.
+                "score": None if engine == "boundary_v1" else seg.get("score", 85),
                 "title": f"Clip {i + 1}",
                 "duration": round(seg["end"] - seg["start"], 1)
-            })
+            }
+            if engine == "boundary_v1":
+                clip["tier"] = seg["tier"]
+            rich_clips.append(clip)
         return rich_clips
     except BaseException as exc:
         cancelled = is_job_cancelled(job_id) or (isinstance(exc, HTTPException) and exc.status_code == 499)

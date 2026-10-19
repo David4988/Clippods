@@ -88,6 +88,15 @@ JOB_RECORD_TTL_HOURS = float(os.environ.get("JOB_RECORD_TTL_HOURS", "24.0"))
 # "adaptive_v1" selects a per-language profile, gates quality and retries only
 # suspicious regions once (services/asr_pipeline.py). Opt-in; not the default.
 ASR_PROFILE = os.environ.get("ASR_PROFILE", "legacy")
+# Clip selection engine (D17). "legacy_v2" is the original picker (3 clips,
+# unchanged). "boundary_v1" picks up to CLIP_COUNT clips from sentence boundaries
+# and safe cut points (services/selection/boundary_v1.py); it works best with word
+# timestamps (ASR_PROFILE=adaptive_v1 or rich_v1). Opt-in until the owner's review.
+SELECTION_ENGINE = os.environ.get("SELECTION_ENGINE", "legacy_v2")
+if SELECTION_ENGINE not in ("legacy_v2", "boundary_v1"):
+    raise ValueError(f"SELECTION_ENGINE must be 'legacy_v2' or 'boundary_v1', got {SELECTION_ENGINE!r}")
+CLIP_COUNT = int(os.environ.get("CLIP_COUNT", "5"))
+
 # Where Faster-Whisper models are cached (a Hugging Face hub cache folder).
 # Unset = the default ~/.cache/huggingface/hub.
 ASR_MODEL_DIR = os.environ.get("ASR_MODEL_DIR") or None

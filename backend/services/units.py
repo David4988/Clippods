@@ -48,6 +48,7 @@ class StructWord:
     text: str
     segment_id: int
     run: int                       # trusted run: consecutive words with no untrusted text between
+    probability: Optional[float] = None   # decoder word probability (None for segment pieces)
 
 
 @dataclass
@@ -109,10 +110,10 @@ def trusted_words(transcript: Transcript) -> tuple[list[StructWord], RunEdges, s
             pending_break = True
             continue
         if has_words:
-            pieces = [(w.start, w.end, w.text) for w in (seg.words or [])]
+            pieces = [(w.start, w.end, w.text, w.probability) for w in (seg.words or [])]
         else:
-            pieces = [(seg.start, seg.end, seg.text)]
-        for start, end, text in pieces:
+            pieces = [(seg.start, seg.end, seg.text, None)]
+        for start, end, text, probability in pieces:
             if not text.strip():
                 continue
             if pending_break:
@@ -122,7 +123,8 @@ def trusted_words(transcript: Transcript) -> tuple[list[StructWord], RunEdges, s
                 edges.untrusted_before.add(run)
                 pending_break = False
             words.append(StructWord(index=len(words), start=float(start), end=float(end),
-                                    text=text.strip(), segment_id=seg.id, run=run))
+                                    text=text.strip(), segment_id=seg.id, run=run,
+                                    probability=probability))
     if pending_break and words:
         edges.untrusted_after.add(run)
     counts["excluded_seconds"] = round(counts["excluded_seconds"], 3)
@@ -206,5 +208,8 @@ def _split_long(group: list[Sentence], max_s: float) -> list[list[Sentence]]:
     """Split at the largest internal silence until every piece fits (or is one sentence)."""
     if len(group) == 1 or group[-1].end - group[0].start <= max_s:
         return [group]
-    k = max(range(len(group) - 1), key=lambda i: (group[i].gap_after_ms, -i))
+    # Largest silence wins; among equal silences, the one nearest the middle, so a
+    # run of equal pauses splits into balanced halves rather than peeling sentences.
+    middle = (group[0].start + group[-1].end) / 2
+    k = max(range(len(group) - 1), key=lambda i: (group[i].gap_after_ms, -abs(group[i].end - middle), -i))
     return _split_long(group[:k + 1], max_s) + _split_long(group[k + 1:], max_s)

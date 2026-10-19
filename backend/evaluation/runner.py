@@ -159,8 +159,10 @@ def run_evaluation(dataset: Dataset, options: RunOptions, log=print) -> RunOutco
                 for spec in options.engines:
                     engine_dir = item_dir / spec.label
                     with Measure() as m:
-                        result = run_engine(spec, transcript, duration)
-                    metrics = selection_metrics(result.clips, spec.clip_count, duration, result.analysis)
+                        result = run_engine(spec, transcript, duration,
+                                            audio_path=str(audio.path / "audio.wav"))
+                    metrics = selection_metrics(result.clips, spec.clip_count, duration, result.analysis,
+                                                transcript=transcript)
                     metrics["engine_wall_s"] = m.wall_s
 
                     clip_files: list[str] = []

@@ -97,13 +97,18 @@ def run_transcript(cache: StageCache, audio: CacheResult, profile_name: str, lan
     from dataclasses import asdict
     from services import transcription
 
-    profile = transcription.get_profile(profile_name)
+    adaptive = profile_name == "adaptive_v1"
+    profile = None if adaptive else transcription.get_profile(profile_name)
 
     def build(work: Path) -> dict:
-        # transcribe_rich raises on an unavailable model; nothing fake is ever cached.
+        # Both entry points raise on an unavailable model; nothing fake is ever cached.
         with Measure() as m:
-            transcript = transcription.transcribe_rich(
-                str(audio.path / "audio.wav"), profile=profile, language_mode=language_mode)
+            if adaptive:
+                from services.asr_pipeline import transcribe_adaptive
+                transcript = transcribe_adaptive(str(audio.path / "audio.wav"), language=language_mode)
+            else:
+                transcript = transcription.transcribe_rich(
+                    str(audio.path / "audio.wav"), profile=profile, language_mode=language_mode)
         write_json(work / "transcript.json", transcript.to_dict())
         quality = transcript.quality
         return {
@@ -120,10 +125,20 @@ def run_transcript(cache: StageCache, audio: CacheResult, profile_name: str, lan
             "real_time_factor": round(m.wall_s / transcript.audio_duration, 4) if transcript.audio_duration else None,
         }
 
-    config = {"impl": "services.transcription.transcribe_rich", "profile": asdict(profile),
-              "language_mode": language_mode,
-              "faster_whisper": _package_version("faster-whisper"),
-              "ctranslate2": _package_version("ctranslate2")}
+    if adaptive:
+        from services import asr_pipeline
+        config = {"impl": "services.asr_pipeline.transcribe_adaptive",
+                  "pipeline": asr_pipeline.PIPELINE_VERSION,
+                  "profiles": {name: asdict(transcription.PROFILES[name])
+                               for name in sorted(set(asr_pipeline.LANGUAGE_PROFILE.values()))},
+                  "region_params": asr_pipeline.REGION_PARAMS,
+                  "accept_params": asr_pipeline.ACCEPT_PARAMS,
+                  "retry_budget_fraction": asr_pipeline.RETRY_BUDGET_FRACTION}
+    else:
+        config = {"impl": "services.transcription.transcribe_rich", "profile": asdict(profile)}
+    config.update({"language_mode": language_mode,
+                   "faster_whisper": _package_version("faster-whisper"),
+                   "ctranslate2": _package_version("ctranslate2")})
     return cache.get_or_build("transcript", TRANSCRIPT_VERSION, {"audio_key": audio.key}, config, build)
 
 

@@ -182,12 +182,13 @@ def test_committed_v1_template_is_valid():
 # engines & metrics
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("spec, label", [("legacy_v2@3", "legacy_v2@3"), (" legacy_v2@5 ", "legacy_v2@5")])
+@pytest.mark.parametrize("spec, label", [("legacy_v2@3", "legacy_v2@3"), (" legacy_v2@5 ", "legacy_v2@5"),
+                                         ("boundary_v1@5", "boundary_v1@5")])
 def test_engine_spec_parsing(spec, label):
     assert parse_engine_spec(spec).label == label
 
 
-@pytest.mark.parametrize("spec", ["legacy_v2", "legacy_v2@0", "boundary_v1@5", "LEGACY@3"])
+@pytest.mark.parametrize("spec", ["legacy_v2", "legacy_v2@0", "boundary_v2@5", "LEGACY@3"])
 def test_bad_engine_specs(spec):
     with pytest.raises(ValueError):
         parse_engine_spec(spec)
@@ -210,7 +211,9 @@ def test_metrics_count_identical_and_overlapping_clips():
     assert m["distinct_spans"] == 3
     assert m["overlapping_pairs"] == 3  # (0,1) identical, (0,2) and (1,2) partial
     assert m["max_overlap_ratio"] == 1.0
-    assert "mid_word_cut_rate" in m["not_yet_measured"]
+    # Clip-edge quality is measured since Phase 6 (needs a transcript); labels-based metrics are not.
+    assert "truncated_ending_rate" in m["not_yet_measured"]
+    assert "mid_word_cut_rate" not in m["not_yet_measured"] and "boundary" not in m
 
 
 def test_metrics_surface_duplicates_legacy_trace_hides():
