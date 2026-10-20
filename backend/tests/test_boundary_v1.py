@@ -103,8 +103,8 @@ def test_too_short_for_any_clip_says_so():
 
 
 def test_tiers_relax_in_order_when_the_target_cannot_be_met():
-    # Candidates are ~9.4, 14.2 or 19 s long here, so nothing fits a 15.0–15.5 s target.
-    clips, analysis, _ = pick(talk(), params={"target_min_s": 15.0, "target_max_s": 15.5})
+    # Candidates are ~9.4 s long here, so nothing fits an 11.0–11.5 s target.
+    clips, analysis, _ = pick(talk(), params={"target_min_s": 11.0, "target_max_s": 11.5})
     tiers = [c["tier"] for c in clips]
     assert tiers == sorted(tiers) and max(tiers) == 4
     # Greedy packing on a 3-minute input may fit fewer than 5; then the shortfall is explained.
@@ -114,10 +114,11 @@ def test_tiers_relax_in_order_when_the_target_cannot_be_met():
 
 def test_clip_stops_on_a_question_rather_than_running_past_it():
     rng = random.Random(3)
-    # 18 sentences (~86 s): one thought in the plain version, so only the question changes structure.
-    base = [words(rng, 8).capitalize() for _ in range(18)]
-    plain = talk(n=18, texts=[b + "." for b in base])
-    question = talk(n=18, texts=[b + ("?" if i == 12 else ".") for i, b in enumerate(base)])
+    # 18 short sentences (~50 s): one thought in the plain version, so only the question changes
+    # structure. 2 s sentences let a clip end on the question or one sentence later (8.2 / 11 s).
+    base = [words(rng, 5).capitalize() for _ in range(18)]
+    plain = talk(n=18, sentence_s=2.0, texts=[b + "." for b in base])
+    question = talk(n=18, sentence_s=2.0, texts=[b + ("?" if i == 12 else ".") for i, b in enumerate(base)])
     everything = {"variants_per_start": 1000, "candidates_in_analysis": 100000}
     _, a_plain, _ = pick(plain, params=everything)
     _, a_q, s_q = pick(question, params=everything)
@@ -151,9 +152,9 @@ def test_clip_stops_on_a_question_rather_than_running_past_it():
 
 def test_untrusted_and_mostly_silent_stretches_are_pruned():
     # Short untrusted spans: a clip can only straddle one that is shorter than the hard maximum.
-    _, analysis, _ = pick(talk(n=40, suspect=(10, 25)))
+    _, analysis, _ = pick(talk(n=40, sentence_s=2.0, suspect=(10, 25)))
     assert analysis["counts"]["pruned"].get("mostly_untrusted_transcript", 0) > 0
-    _, analysis, _ = pick(talk(n=30, extra_gap_every=3, extra_gap_s=5.0))
+    _, analysis, _ = pick(talk(n=30, sentence_s=2.0, extra_gap_every=3, extra_gap_s=3.0))
     assert analysis["counts"]["pruned"].get("too_little_speech", 0) > 0
 
 
@@ -249,6 +250,19 @@ def test_harness_measures_boundary_quality_for_both_engines():
     assert m_new["boundary"]["starts_at_sentence_start"] == 5 and m_new["boundary"]["ends_at_sentence_end"] == 5
     assert m_new["shortfall_reason"] is None
     assert "edges_inside_speech" in m_old["boundary"]
+
+
+def test_ten_second_legacy_baseline_is_evaluation_only_and_leaves_legacy_untouched():
+    from services import segment_selection
+    t = talk()
+    short = run_engine(parse_engine_spec("legacy_v2_10s@5"), t, t.audio_duration)
+    assert short.engine_version.endswith("+10s") and len(short.clips) == 5
+    assert all(c["end"] - c["start"] <= 10.0 + 1e-6 for c in short.clips)
+    assert segment_selection.MAX_DURATION == 20.0 and segment_selection.BUFFER == 3.0   # restored
+    normal = run_engine(parse_engine_spec("legacy_v2@5"), t, t.audio_duration)
+    assert max(c["end"] - c["start"] for c in normal.clips) > 10.0
+    with pytest.raises(ValueError, match="unknown selection engine"):
+        run("legacy_v2_10s", SelectionInput(t, t.audio_duration, 5))              # not in production
 
 
 def test_selection_engine_setting_is_validated():

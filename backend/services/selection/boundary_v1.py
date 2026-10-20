@@ -26,13 +26,13 @@ from services.selection.ranker import pick, shortfall_reason
 from services.transcript_quality import segment_suspicion
 
 ENGINE = "boundary_v1"
-ENGINE_VERSION = "boundary_v1.1"
+ENGINE_VERSION = "boundary_v1.2"
 
 PARAMS = {
-    "target_min_s": 8.0,             # D7 (owner, revised 2026-10-20 after listening: ~10 s reels)
-    "target_max_s": 12.0,            # D7
+    "target_min_s": 8.0,             # D7 (owner, revised 2026-10-20 after listening: "10 s is enough")
+    "target_max_s": 10.0,            # D7
     "hard_min_s": 6.0,               # D7
-    "hard_max_s": 18.0,              # D7
+    "hard_max_s": 12.0,              # D7
     "variants_per_start": 3,         # master plan §14.3
     "untrusted_share_max": 0.2,      # PROPOSED
     "speech_ratio_min": 0.6,         # PROPOSED: prunes music beds and long silences

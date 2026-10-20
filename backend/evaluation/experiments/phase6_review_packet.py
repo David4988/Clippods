@@ -2,9 +2,10 @@
 Phase 6 listening review packet: old vs new picker, blind.
 
     python -m evaluation.experiments.phase6_review_packet <run_id> [<run_id> ...] [--seed N] [--out NAME]
+        [--engines OLD NEW]
 
-For every item in the given harness runs that has both `legacy_v2@5` and
-`boundary_v1@5` selections, cuts each clip's audio from the cached 16 kHz WAV
+For every item in the given harness runs that has both engines' selections
+(default `legacy_v2@5` and `boundary_v1@5`), cuts each clip's audio from the cached 16 kHz WAV
 into an .m4a, labels the two engines "A" and "B" in a random (seeded) order per
 item, and writes:
 
@@ -26,7 +27,7 @@ from pathlib import Path
 
 from evaluation.storage import eval_dir, read_json, write_json
 
-ENGINES = ("legacy_v2@5", "boundary_v1@5")
+DEFAULT_ENGINES = ("legacy_v2@5", "boundary_v1@5")
 
 
 def _cache_path(stage: str, key: str) -> Path:
@@ -57,12 +58,14 @@ def main(argv=None) -> int:
     ap.add_argument("run_ids", nargs="+")
     ap.add_argument("--seed", type=int, default=20261019)
     ap.add_argument("--out", default="phase6_review", help="folder name under <eval_dir>/realworld/")
+    ap.add_argument("--engines", nargs=2, default=list(DEFAULT_ENGINES), metavar=("OLD", "NEW"))
     args = ap.parse_args(argv)
+    engines = tuple(args.engines)
 
     out = eval_dir() / "realworld" / args.out
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
-    key: dict = {"seed": args.seed, "runs": args.run_ids, "items": {}}
+    key: dict = {"seed": args.seed, "runs": args.run_ids, "engines": engines, "items": {}}
     md = ["# ClipPods — clip listening review (blind)", "",
           "For each video, listen to set **A** and set **B** (5 clips each). For every clip note:",
           "**clean start?** (doesn't begin mid-sentence or mid-word) · **clean end?** (doesn't stop mid-thought) · "
@@ -74,13 +77,13 @@ def main(argv=None) -> int:
         run = read_json(run_dir / "run.json")
         for item_id, record in run["items"].items():
             item_dir = run_dir / "items" / item_id
-            if record.get("status") != "ok" or not all((item_dir / e / "selection.json").exists() for e in ENGINES):
+            if record.get("status") != "ok" or not all((item_dir / e / "selection.json").exists() for e in engines):
                 continue
             stages = record["stages"]
             wav = _cache_path("audio", stages["audio"]["key"]) / "audio.wav"
             transcript = Transcript.from_dict(read_json(_cache_path("transcript", stages["transcript"]["key"])
                                                         / "transcript.json"))
-            order = list(ENGINES)
+            order = list(engines)
             rng.shuffle(order)
             labels = dict(zip("AB", order))
             key["items"][item_id] = {"run_id": run_id, **labels}
