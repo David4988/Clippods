@@ -27,14 +27,14 @@ WEIGHTS = {
     "start_is_thought": 0.5,     # opens at a thought boundary
     "end_is_thought": 0.5,       # closes at a thought boundary
     "question_count": 0.25,      # questions raised inside the clip (capped at 2)
-    "ends_on_question": 0.0,     # D8: a question ending is allowed, not favoured
+    "ends_on_question": 0.25,    # D8 (revised): stopping on a question is a hook (light: 0.5 made 12/20 clips end on one)
     "filler_start": -0.5,        # "and…", "so…", "um…"
     "lowercase_start": -0.5,     # Latin script starting lower-case: mid-sentence in practice
     "start_unpunctuated": -0.25, # previous sentence ended on a pause, not punctuation
     "end_unpunctuated": -0.25,   # last sentence ends on a pause, not punctuation
     "context_start": -0.5,       # "he…", "that…" — needs earlier context
     "untrusted_share": -2.0,     # share of the clip whose transcript is untrusted
-    "duration_fit": 1.0,         # 1 inside the 20–45 s target, 0 at the 12/60 s limits
+    "duration_fit": 1.0,         # 1 inside the D7 target, falling to 0 at the hard limits
 }
 Z_FEATURES = ("speech_rate", "loudness", "loudness_var", "asr_confidence")
 
@@ -143,8 +143,7 @@ def measure(c: Candidate, ctx: FeatureContext) -> None:
         "loudness_var": loud_var,
         "asr_confidence": fmean(probs) if probs else None,
         "start_is_thought": boundary(ctx.cut_kind[c.start_cut]),
-        # D8: a question ends a thought, but earns no thought-boundary bonus for it.
-        "end_is_thought": 0.0 if last.terminal == "?" else boundary(ctx.cut_kind[c.end_cut]),
+        "end_is_thought": boundary(ctx.cut_kind[c.end_cut]),
         "question_count": float(min(2, sum(1 for s in inner if s.terminal == "?"))),
         "ends_on_question": 1.0 if last.terminal == "?" else 0.0,
         "filler_start": 1.0 if is_filler_start(first_text, ctx.language) else 0.0,

@@ -1,14 +1,14 @@
 """
 Phase 6 listening review packet: old vs new picker, blind.
 
-    python -m evaluation.experiments.phase6_review_packet <run_id> [<run_id> ...] [--seed N]
+    python -m evaluation.experiments.phase6_review_packet <run_id> [<run_id> ...] [--seed N] [--out NAME]
 
 For every item in the given harness runs that has both `legacy_v2@5` and
 `boundary_v1@5` selections, cuts each clip's audio from the cached 16 kHz WAV
 into an .m4a, labels the two engines "A" and "B" in a random (seeded) order per
 item, and writes:
 
-  <eval_dir>/realworld/phase6_review/
+  <eval_dir>/realworld/<NAME, default phase6_review>/
       review.md          what to listen to, clip text, blanks for ratings
       key.json           which engine is A/B per item — open only after rating
       <item>/A_1.m4a …   clip audio
@@ -56,9 +56,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("run_ids", nargs="+")
     ap.add_argument("--seed", type=int, default=20261019)
+    ap.add_argument("--out", default="phase6_review", help="folder name under <eval_dir>/realworld/")
     args = ap.parse_args(argv)
 
-    out = eval_dir() / "realworld" / "phase6_review"
+    out = eval_dir() / "realworld" / args.out
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
     key: dict = {"seed": args.seed, "runs": args.run_ids, "items": {}}
@@ -97,7 +98,7 @@ def main(argv=None) -> int:
                     texts.append(f"{n}. _{_clip_text(transcript, c['start'], c['end'])[:600]}_")
                 md += ["", *texts, ""]
             md += [f"**Overall for {item_id}: prefer A / B / no difference:** ", ""]
-            print(f"  {item_id}: A={labels['A']} B={labels['B']}", flush=True)
+            print(f"  {item_id}: done", flush=True)     # labels stay in key.json only
 
     write_json(out / "key.json", key)
     (out / "review.md").write_text("\n".join(md) + "\n", encoding="utf-8")

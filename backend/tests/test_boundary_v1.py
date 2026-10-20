@@ -31,6 +31,7 @@ from services.speech_regions import silences
 from services.speech_structure import build_speech_structure
 from tests.fakes import transcript_with_words
 
+P = boundary_v1.PARAMS
 SYLLABLES = ["ka", "lo", "mi", "re", "su", "ta", "ve", "no", "pa", "di", "go", "be", "zu", "fy", "qu"]
 
 
@@ -76,7 +77,7 @@ def test_clips_start_and_end_on_sentence_boundary_cuts_inside_silence():
         assert c["start"] == s.cut_in and s.before_word in starts_at
         assert c["end"] == e.cut_out and e.after_word in ends_at
         assert all(any(a - 1e-6 <= x <= b + 1e-6 for a, b in sil) for x in (c["start"], c["end"]))
-        assert 12.0 <= c["end"] - c["start"] <= 60.0
+        assert P["hard_min_s"] <= c["end"] - c["start"] <= P["hard_max_s"]
 
 
 def test_no_overlaps_no_duplicates_and_target_durations_when_material_allows():
@@ -84,24 +85,26 @@ def test_no_overlaps_no_duplicates_and_target_durations_when_material_allows():
     spans = sorted((c["start"], c["end"]) for c in clips)
     assert len(set(spans)) == len(spans)
     assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:]))
-    assert all(c["tier"] == 1 and 20.0 <= c["end"] - c["start"] <= 45.0 for c in clips)
+    assert all(c["tier"] == 1 and P["target_min_s"] <= c["end"] - c["start"] <= P["target_max_s"]
+               for c in clips)
     assert [c["rank"] for c in clips] == list(range(5))
     assert analysis["tiers"][0]["added"] == 5
 
 
 def test_short_input_returns_fewer_clips_with_a_reason():
-    clips, analysis, _ = pick(talk(n=6))                       # ~29 s of talk
+    clips, analysis, _ = pick(talk(n=6))                       # ~29 s of talk: room for ~3 clips
     assert 0 < len(clips) < 5
     assert "instead of 5" in analysis["shortfall_reason"]
 
 
 def test_too_short_for_any_clip_says_so():
-    clips, analysis, _ = pick(talk(n=2))
+    clips, analysis, _ = pick(talk(n=1))                       # one 4 s sentence: under the hard minimum
     assert clips == [] and analysis["shortfall_reason"].startswith("no candidate clips")
 
 
 def test_tiers_relax_in_order_when_the_target_cannot_be_met():
-    clips, analysis, _ = pick(talk(), params={"target_min_s": 40.0, "target_max_s": 41.0})
+    # Candidates are ~9.4, 14.2 or 19 s long here, so nothing fits a 15.0–15.5 s target.
+    clips, analysis, _ = pick(talk(), params={"target_min_s": 15.0, "target_max_s": 15.5})
     tiers = [c["tier"] for c in clips]
     assert tiers == sorted(tiers) and max(tiers) == 4
     # Greedy packing on a 3-minute input may fit fewer than 5; then the shortfall is explained.
@@ -109,34 +112,48 @@ def test_tiers_relax_in_order_when_the_target_cannot_be_met():
     assert [d["tier"] for d in analysis["tiers"]] == sorted({d["tier"] for d in analysis["tiers"]})
 
 
-def test_question_ending_is_allowed_but_scores_like_a_statement_ending():
+def test_clip_stops_on_a_question_rather_than_running_past_it():
     rng = random.Random(3)
     # 18 sentences (~86 s): one thought in the plain version, so only the question changes structure.
     base = [words(rng, 8).capitalize() for _ in range(18)]
     plain = talk(n=18, texts=[b + "." for b in base])
     question = talk(n=18, texts=[b + ("?" if i == 12 else ".") for i, b in enumerate(base)])
     everything = {"variants_per_start": 1000, "candidates_in_analysis": 100000}
-    _, a_plain, s_plain = pick(plain, params=everything)
+    _, a_plain, _ = pick(plain, params=everything)
     _, a_q, s_q = pick(question, params=everything)
 
     def by_span(analysis):
         return {(c["start"], c["end"]): c for c in analysis["candidates_top"]}
-    end_of_12 = s_q.sentences[12].end
+    end_of_12, end_of_13 = s_q.sentences[12].end, s_q.sentences[13].end
     plain_c, q_c = by_span(a_plain), by_span(a_q)
-    shared = [k for k in q_c if k in plain_c and abs(q_c[k]["end"] - end_of_12) < 0.5
-              and q_c[k]["start"] < end_of_12 - 12]
-    assert shared, "expected candidates ending on the question"
-    for k in shared:
-        assert q_c[k]["features"]["ends_on_question"] == 1.0
-        assert q_c[k]["contributions"]["ends_on_question"] == 0.0
-        assert q_c[k]["features"]["end_is_thought"] == 0.0
-        assert q_c[k]["score"] == plain_c[k]["score"]
+    on_q = [k for k in q_c if k in plain_c and abs(k[1] - end_of_12) < 0.5]
+    assert on_q, "expected candidates ending on the question"
+    w = boundary_v1.feat.WEIGHTS
+    for k in on_q:
+        # D8 (revised): the question ending earns the thought-end and question bonuses.
+        assert q_c[k]["features"]["ends_on_question"] == 1.0 and q_c[k]["features"]["end_is_thought"] == 1.0
+        if q_c[k]["features"]["start_is_thought"] == plain_c[k]["features"]["start_is_thought"]:
+            assert q_c[k]["score"] == pytest.approx(plain_c[k]["score"] + w["ends_on_question"]
+                                                    + w["end_is_thought"])
+    # From the same start, stopping on the question beats one more sentence after it
+    # (length aside: the two endings differ in duration, which is scored separately).
+    past = {k[0]: q_c[k] for k in q_c if abs(k[1] - end_of_13) < 0.5}
+    pairs = [(q_c[k], past[k[0]]) for k in on_q if k[0] in past]
+    assert pairs
+
+    def ending_score(c):
+        return c["score"] - c["contributions"]["duration_fit"]
+    assert all(ending_score(q) > ending_score(after) for q, after in pairs)
+    # And with the default ending variants, the question ending is generated for those starts.
+    _, a_default, _ = pick(question)
+    assert any(abs(c["end"] - end_of_12) < 0.5 for c in a_default["candidates_top"])
 
 
 def test_untrusted_and_mostly_silent_stretches_are_pruned():
-    _, analysis, _ = pick(talk(n=40, suspect=tuple(range(10, 20))))
+    # Short untrusted spans: a clip can only straddle one that is shorter than the hard maximum.
+    _, analysis, _ = pick(talk(n=40, suspect=(10, 25)))
     assert analysis["counts"]["pruned"].get("mostly_untrusted_transcript", 0) > 0
-    _, analysis, _ = pick(talk(n=30, extra_gap_every=3, extra_gap_s=9.0))
+    _, analysis, _ = pick(talk(n=30, extra_gap_every=3, extra_gap_s=5.0))
     assert analysis["counts"]["pruned"].get("too_little_speech", 0) > 0
 
 
@@ -319,7 +336,7 @@ def test_short_video_returns_fewer_clips_and_says_why(tmp_path, monkeypatch):
 
 def test_no_clean_clip_fails_the_job_with_the_reason(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SELECTION_ENGINE", "boundary_v1")
-    job = _run_job(tmp_path, talk(n=2))
+    job = _run_job(tmp_path, talk(n=1))
     assert job["status"] == "error"
     assert job["error"].startswith("No clean clips could be found: no candidate clips")
 

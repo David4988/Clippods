@@ -4,7 +4,7 @@ boundaries and safe cut points (master plan Phase 6, §14.3–§14.6).
 
     SpeechStructure (Phase 5)
       → candidates: start at a cut before a sentence, end at a cut after a sentence,
-                    12–60 s, up to 3 ending variants per start
+                    within the hard duration limits, up to 3 ending variants per start
       → prune: mostly untrusted transcript, mostly non-speech
       → features + score (features.py)
       → pick up to N with no overlap, tiered relaxation (ranker.py)
@@ -26,13 +26,13 @@ from services.selection.ranker import pick, shortfall_reason
 from services.transcript_quality import segment_suspicion
 
 ENGINE = "boundary_v1"
-ENGINE_VERSION = "boundary_v1.0"
+ENGINE_VERSION = "boundary_v1.1"
 
 PARAMS = {
-    "target_min_s": 20.0,            # D7 (owner, CP4)
-    "target_max_s": 45.0,            # D7
-    "hard_min_s": 12.0,              # D7
-    "hard_max_s": 60.0,              # D7
+    "target_min_s": 8.0,             # D7 (owner, revised 2026-10-20 after listening: ~10 s reels)
+    "target_max_s": 12.0,            # D7
+    "hard_min_s": 6.0,               # D7
+    "hard_max_s": 18.0,              # D7
     "variants_per_start": 3,         # master plan §14.3
     "untrusted_share_max": 0.2,      # PROPOSED
     "speech_ratio_min": 0.6,         # PROPOSED: prunes music beds and long silences
@@ -41,7 +41,7 @@ PARAMS = {
     "candidates_in_analysis": 50,
 }
 
-_END_STRENGTH = {"thought": 2, "edge": 1, "sentence": 1}
+_END_STRENGTH = {"question": 3, "thought": 2, "edge": 1, "sentence": 1}
 
 
 def select(transcript, structure, video_duration: float, clip_count: int,
@@ -77,7 +77,8 @@ def select(transcript, structure, video_duration: float, clip_count: int,
     feat.normalise_and_score(valid)
 
     picked, decisions = pick(valid, clip_count, p)
-    reason = shortfall_reason(len(picked), clip_count, len(valid), len(generated))
+    reason = shortfall_reason(len(picked), clip_count, len(valid), len(generated),
+                              (p["hard_min_s"], p["hard_max_s"]))
 
     clips = []
     final = []
@@ -129,10 +130,10 @@ def _generate(structure, p: dict) -> tuple[list[feat.Candidate], dict]:
         return max(0.0, p["target_min_s"] - duration, duration - p["target_max_s"])
 
     def end_strength(e) -> int:
-        # D8: a question closes a thought, but a question ending must not outrank a
-        # plain sentence ending — it is allowed, not favoured.
-        if e.kind == "thought" and sentences[sentence_of[e.after_word]].terminal == "?":
-            return _END_STRENGTH["sentence"]
+        # D8 (revised): when a clip can stop right on a question, prefer that to running
+        # on past it — the question is the hook.
+        if sentences[sentence_of[e.after_word]].terminal == "?":
+            return _END_STRENGTH["question"]
         return _END_STRENGTH.get(e.kind, 0)
 
     cands: list[feat.Candidate] = []
@@ -163,12 +164,15 @@ def _candidate_record(c: feat.Candidate, ctx: feat.FeatureContext) -> dict:
     }
 
 
-_TIER_NOTE = {
-    1: "tier 1: inside the 20–45 s target, above the quality bar, distinct from the other clips",
-    2: "tier 2: below the quality bar, but no better non-overlapping clip was left",
-    3: "tier 3: similar in wording to another clip, but no distinct one was left",
-    4: "tier 4: outside the 20–45 s target (still 12–60 s), no in-target clip was left",
-}
+def _tier_note(tier: int, p: dict) -> str:
+    target = f"{p['target_min_s']:g}–{p['target_max_s']:g} s"
+    return {
+        1: f"tier 1: inside the {target} target, above the quality bar, distinct from the other clips",
+        2: "tier 2: below the quality bar, but no better non-overlapping clip was left",
+        3: "tier 3: similar in wording to another clip, but no distinct one was left",
+        4: f"tier 4: outside the {target} target (still {p['hard_min_s']:g}–{p['hard_max_s']:g} s), "
+           "no in-target clip was left",
+    }[tier]
 
 
 _KIND_PHRASE = {"thought": "a thought boundary", "sentence": "a sentence boundary",
@@ -177,7 +181,7 @@ _KIND_PHRASE = {"thought": "a thought boundary", "sentence": "a sentence boundar
 
 def _reasons(c: feat.Candidate, tier: int, ctx: feat.FeatureContext) -> list[str]:
     f = c.features
-    out = [_TIER_NOTE[tier],
+    out = [_tier_note(tier, ctx.params),
            f"starts at {_KIND_PHRASE[ctx.cut_kind[c.start_cut]]}, ends at {_KIND_PHRASE[ctx.cut_kind[c.end_cut]]}"]
     for name, up, down in (("loudness_z", "louder", "quieter"), ("speech_rate_z", "faster", "slower"),
                            ("loudness_var_z", "more dynamic", "flatter"),
@@ -188,7 +192,7 @@ def _reasons(c: feat.Candidate, tier: int, ctx: feat.FeatureContext) -> list[str
     if f["question_count"]:
         out.append(f"raises {int(f['question_count'])} question(s) inside the clip")
     if f["ends_on_question"]:
-        out.append("ends on a question (allowed, not favoured — D8)")
+        out.append("ends on a question — favoured, the question is the hook (D8)")
     if f["filler_start"]:
         out.append("penalised: starts with a filler/connective word")
     if f["lowercase_start"]:

@@ -4,7 +4,7 @@ Automatic selection metrics that need no reference labels.
 Phase 0: clip count, duplicates, overlaps, durations, legacy fallback usage.
 Phase 6: boundary metrics from VAD + the speech structure (clip edges inside
 speech, edges at sentence boundaries, leading/trailing silence, durations in the
-20–45 s target, untrusted transcript share). Metrics needing gold moments or
+boundary_v1 D7 target, untrusted transcript share). Metrics needing gold moments or
 human labels (master plan §10.2) stay in `NOT_YET_MEASURED` so reports never
 imply they were checked.
 """
@@ -80,7 +80,6 @@ def selection_metrics(clips: list[dict], expected_count: int, video_duration: fl
     return metrics
 
 
-TARGET_S = (20.0, 45.0)        # D7
 SENTENCE_EDGE_TOLERANCE_S = 0.3
 
 
@@ -88,6 +87,7 @@ def boundary_metrics(clips: list[dict], transcript) -> dict:
     """How cleanly clip edges sit relative to speech (VAD) and sentence boundaries."""
     from bisect import bisect_left
 
+    from services.selection.boundary_v1 import PARAMS
     from services.speech_structure import build_speech_structure
     from services.transcript_quality import segment_suspicion
 
@@ -127,7 +127,8 @@ def boundary_metrics(clips: list[dict], transcript) -> dict:
         "ends_at_sentence_end": sum(near(c["end"], end_times) for c in clips),
         "leading_silence_s_mean": round(statistics.mean(x for x, _ in lt), 3) if n else None,
         "trailing_silence_s_mean": round(statistics.mean(y for _, y in lt), 3) if n else None,
-        "durations_in_target": sum(TARGET_S[0] <= c["end"] - c["start"] <= TARGET_S[1] for c in clips),
+        "durations_in_target": sum(PARAMS["target_min_s"] <= c["end"] - c["start"] <= PARAMS["target_max_s"]
+                                   for c in clips),
         "untrusted_share_mean": round(statistics.mean(
             overlap(c["start"], c["end"], untrusted) / max(c["end"] - c["start"], 1e-9) for c in clips), 3) if n else None,
     }

@@ -2,7 +2,7 @@
 
 **Backend cleanup, transcription reliability, clip selection and boundary quality**
 
-Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measured · CP3 decided (D25–D30); ASR frozen for V1 · Phase 5 implemented · CP4 decided (2026-10-19) · Phase 6 `boundary_v1` implemented (opt-in, default still `legacy_v2`) and measured on 4 full podcasts (EV-7.x) · awaiting owner listening review · Phase 2 dataset not frozen**
+Status: **Checkpoint 1 approved 2026-09-14 · Phases 0, 1, 3 complete · Phase 4 measured · CP3 decided (D25–D30); ASR frozen for V1 · Phase 5 implemented · CP4 decided (2026-10-19) · Phase 6 `boundary_v1` implemented (opt-in, default still `legacy_v2`) and measured on 4 full podcasts (EV-7.x) · D7/D8 revised after first listening (`boundary_v1.1`, ~10 s clips) · awaiting owner listening review · Phase 2 dataset not frozen**
 Investigation date: 2026-09-14 · Investigated at `bf7b0c9` (main)
 Last state update: 2026-10-06 · experimental `adaptive_v1` ASR stage committed at `c7719dc` (branch `asr-rich-contract`), opt-in only
 
@@ -69,6 +69,8 @@ resolve the CP4 topics D6–D10 for `boundary_v1`.
 | D8 endings | **Question endings allowed, not favoured**: valid, recorded, no bonus — a question-induced thought boundary scores like a plain sentence ending. |
 | D9 shortfall | **Return fewer clips with a stated reason.** Never duplicate, never overlap, never cut through speech to reach 5. Zero clean clips fails the job with the reason. |
 | D10 score shown | `boundary_v1` does not expose its internal score (`score: null` in the API); tier and reasons are in `analysis.json`. |
+| D7 revised (2026-10-20) | After listening to the English clips: 20–45 s "feels like a part of the podcast, not a reel" — too much context, energy lost. **Target 8–12 s (~10 s); hard limits 6–18 s.** (`boundary_v1.1`) |
+| D8 revised (2026-10-20) | A clip that reaches a question should **stop on the question**, not run one sentence past it (heard on en1 clip B_4). A question ending now counts as a thought ending, is tried first among each start's endings, and gets a light bonus (`ends_on_question` 0.25; 0.5 made 12 of 20 clips end on a question). |
 
 
 **Process rule:** one phase at a time: implement → test → measure → report → STOP for approval. Evidence contradicting a plan assumption is brought back before any architectural change. Dubbing/voice translation remains an extension point only.
@@ -289,6 +291,19 @@ at the CP3 settings, using `legacy_v2@5` vs `boundary_v1@5` on the same transcri
 seed 20261019, answer key in `key.json`). Built by `evaluation/experiments/phase6_review_packet.py`.
 Switching the defaults (`SELECTION_ENGINE=boundary_v1`, `ASR_PROFILE=adaptive_v1`) waits for that
 review.
+
+**First listening (owner, 2026-10-20, English only):** cuts clean, no mid-word starts or ends, the
+moments chosen are fine, but 20–45 s clips are too long for reels; one clip ran a sentence past a
+question. → D7/D8 revised (above), engine `boundary_v1.1`. Same four podcasts, cached transcripts,
+runs `20261020T202654-…-ed1973` (en), `…202657-…-fd745f` (hi), `…202659-…-0b458f` (ta):
+
+| ID | Observation | Limits |
+|---|---|---|
+| EV-7.8 | **Short clips keep every boundary property**: 20/20 clips 8.5–11.8 s and tier 1, 0/40 edges inside speech (legacy 31/40), 20/20 sentence starts and ends, mean silence 0.23–0.25 s before / 0.24–0.35 s after. Question endings: en1 2, en2 3, hi2 0, ta1 3 of 5. Selection 190–250 ms. | Not yet heard. |
+| EV-7.9 | **What's said is still unjudged**: some short picks are set-up rather than payoff — a host's question alone (en2 4:08), a host's welcome (en2 1:37), intro teasers (en1 0:16, hi2 0:02). Shorter clips make this more visible. No speaker or content understanding exists before the Phase 7 semantic judge. | Read from clip text. |
+
+Second blind packet: `eval_data/realworld/phase6_review_short/` (seed 20261020; the first packet is
+kept unchanged).
 
 
 Synthetic fixtures are for **regression testing only**. All ASR, boundary and semantic-quality decisions must be validated on the frozen real dataset.

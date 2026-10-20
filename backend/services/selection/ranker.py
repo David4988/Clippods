@@ -6,11 +6,11 @@ Greedy by score, with hard rules that are never relaxed:
   * no identical spans
 and rules relaxed tier by tier only when fewer than N clips qualify (master plan
 §14.6 adapted to D7/D9):
-  Tier 1  duration inside the 20–45 s target, score above the quality bar,
+  Tier 1  duration inside the D7 target, score above the quality bar,
           not a near-duplicate of an already chosen clip
   Tier 2  quality bar dropped
   Tier 3  near-duplicate rule dropped
-  Tier 4  durations 12–20 s and 45–60 s allowed
+  Tier 4  durations outside the target but inside the hard limits allowed
 If still fewer than N, the shortfall is returned with a reason (D9) — no
 overlapping or duplicated fill.
 """
@@ -80,13 +80,15 @@ def pick(cands: list[Candidate], count: int, params: dict) -> tuple[list[tuple[C
     return tiers, decisions
 
 
-def shortfall_reason(picked: int, count: int, valid: int, generated: int) -> Optional[str]:
+def shortfall_reason(picked: int, count: int, valid: int, generated: int,
+                     limits: tuple[float, float]) -> Optional[str]:
     if picked >= count:
         return None
+    span = f"{limits[0]:g}–{limits[1]:g} s"
     if generated == 0:
         return ("no candidate clips: the audio has no stretch of whole sentences between safe "
-                "cuts that fits the 12–60 s limits")
+                f"cuts that fits the {span} limits")
     if valid == 0:
         return "every candidate clip was rejected (mostly silence/music, or mostly untrusted transcript)"
-    return (f"only {picked} non-overlapping clip(s) of 12–60 s exist among {valid} valid candidates; "
+    return (f"only {picked} non-overlapping clip(s) of {span} exist among {valid} valid candidates; "
             f"returning {picked} instead of {count} rather than overlapping or duplicating clips")
